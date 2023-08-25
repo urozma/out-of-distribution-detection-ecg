@@ -7,8 +7,10 @@ import scipy.signal
 # Create an array with a certain amount of peaks
 def peaks_vector(length, peaks):
     vector = np.zeros(length)
+    # Randomly define peak position
     vector[np.random.choice(length, peaks, replace=False)] = 1
 
+    # Randomly define peak height
     for i, peak in enumerate(vector):
         if peak == 1:       
             vector[i] = random.randrange(20, 50)
@@ -18,13 +20,13 @@ def peaks_vector(length, peaks):
 
 # Add gaussian kernel to create a pseudo signal
 def gaussian_kernel(signal, mean, std):
-    kernel_size = len(signal)
-
+    # Define gaussian kernel
+    kernel_size = 15  #len(signal)
     x = np.linspace(-kernel_size // 2, kernel_size // 2, kernel_size)
-
     kernel = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mean) / std)**2)
     kernel = kernel / np.sum(kernel)
 
+    # Convolve gaussian kernel with signal
     pseudo_signal = np.convolve(signal, kernel, mode='same')
     
     return pseudo_signal
@@ -39,7 +41,7 @@ def add_noise(signal, scale):
 
 # Test for five peaks
 original_signal = peaks_vector(1000, 5)
-pseudo_signal = gaussian_kernel(original_signal, 0, 10)
+pseudo_signal = gaussian_kernel(original_signal, 0, 1)
 noisy_signal = add_noise(pseudo_signal, 0.1)
 
 #plt.figure()
