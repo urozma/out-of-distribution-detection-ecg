@@ -7,8 +7,11 @@ import scipy.signal
 # Create an array with a certain amount of peaks
 def peaks_vector(length, peaks):
     vector = np.zeros(length)
+
+    # Randomly define peak position
     vector[np.random.choice(length, peaks, replace=False)] = 1
 
+    # Randomly define peak height
     for i, peak in enumerate(vector):
         if peak == 1:       
             vector[i] = random.randrange(20, 50)
@@ -18,13 +21,16 @@ def peaks_vector(length, peaks):
 
 # Add gaussian kernel to create a pseudo signal
 def gaussian_kernel(signal, mean, std):
-    kernel_size = len(signal)
+
+    # Define gaussian kernel
+    kernel_size = 15
 
     x = np.linspace(-kernel_size // 2, kernel_size // 2, kernel_size)
 
     kernel = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mean) / std)**2)
     kernel = kernel / np.sum(kernel)
 
+    # Convolve gaussian kernel with signal
     pseudo_signal = np.convolve(signal, kernel, mode='same')
     
     return pseudo_signal
@@ -35,16 +41,6 @@ def add_noise(signal, scale):
     noise = np.random.normal(0, scale, len(signal))
     noisy_signal = signal + noise
     return noisy_signal
-
-
-# Test for five peaks
-original_signal = peaks_vector(1000, 5)
-pseudo_signal = gaussian_kernel(original_signal, 0, 10)
-noisy_signal = add_noise(pseudo_signal, 0.1)
-
-#plt.figure()
-#plt.plot(range(len(noisy_signal)),noisy_signal)
-#plt.show()
 
 
 # Create a matrix with the previous functions
@@ -60,14 +56,15 @@ def matrix(samples, length, peaks, mean, std):
     matrix = np.array(matrix)
     return matrix
 
-matrix = matrix(4, 1000, 5, 0, 5)
-
 
 # Detect peaks and create a matrix with their indices
 def detect_peaks(matrix):
     peak_matrix = []
     for sample in matrix:
-        peaks, _ = scipy.signal.find_peaks(sample, prominence=(0.8, None))
+        peaks = []
+        for i in range(1, len(sample)-1):
+            if sample[i] > max(sample)*0.3 and sample[i-1] < sample[i] and sample[i+1] < sample[i]:
+                peaks.append(i)
         peak_matrix.append(peaks)
     return peak_matrix
 
@@ -88,6 +85,39 @@ def plot_matrix(matrix):
 
     return plot
 
+
+# Calculate the accuracy of the peak detection with the ground truth
+def accuracy(ground_truth_matrix, detected_peak_matrix, tolerance):
+
+    # Turn whole original matrix in a matrix with just the peak indices
+    true_peak_matrix = []
+    for sample in ground_truth_matrix:
+        true_peaks = [i for i, point in enumerate(sample) if point == 1]
+        true_peak_matrix.append(true_peaks)
+    
+    # GG
+    accuracies = []
+    for i, peaks in enumerate(detected_peak_matrix):
+        true_positives = 0
+        for peak in peaks:
+            # Check if the peak is within tolerance of any ground truth peak
+            if any(abs(peak - true_peak) <= tolerance for true_peak in true_peak_matrix[i]):
+                true_positives += 1
+        false_positives = len(peaks) - true_positives
+        false_negatives = len(ground_truth_matrix[i]) - true_positives
+        accuracy = true_positives / (true_positives + false_positives + false_negatives)
+        accuracies.append(accuracy)
+    
+    mean_accuracy = sum(accuracies) / len(accuracies)
+
+    return mean_accuracy
+
+
+# Test
+matrix = matrix(4, 1000, 5, 0, 5)
+original_signal = peaks_vector(1000, 5)
+pseudo_signal = gaussian_kernel(original_signal, 0, 1)
+noisy_signal = add_noise(pseudo_signal, 0.1)
 
 plot_matrix(matrix)
 plt.show()
