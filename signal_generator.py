@@ -123,12 +123,12 @@ def accuracy(true_peak_matrix, detected_peak_matrix, tolerance):
     return mean_accuracy
 
 # Test
-matrix, ground_truth_matrix = matrix(4, 1000, 5, 0, 5)
-detected_peak_matrix = detect_peaks(matrix)
-true_peak_matrix = ground_truth_indices(ground_truth_matrix)
-accuracy = accuracy(true_peak_matrix, detected_peak_matrix, 1)
+#matrix, ground_truth_matrix = matrix(4, 1000, 5, 0, 5)
+#detected_peak_matrix = detect_peaks(matrix)
+#true_peak_matrix = ground_truth_indices(ground_truth_matrix)
+#accuracy = accuracy(true_peak_matrix, detected_peak_matrix, 1)
 
-plot_matrix(matrix)
-plt.show()
+#plot_matrix(matrix)
+#plt.show()
 
-print("accuracy:",accuracy)
+#print("accuracy:",accuracy)
