@@ -1,7 +1,6 @@
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-import scipy.signal
 
 
 def matrix(samples, length, peaks, mean, std):
