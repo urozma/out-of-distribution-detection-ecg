@@ -112,13 +112,14 @@ def accuracy(true_peak_matrix, detected_peak_matrix, tolerance):
             # Check if the peak is within tolerance of any ground truth peak
             if any(abs(peak - true_peak) <= tolerance for true_peak in true_peak_matrix[i]):
                 true_positives += 1
-    
+        print(true_positives)
         false_positives = len(peaks) - true_positives
         false_negatives = len(true_peak_matrix[i]) - true_positives
         accuracy = true_positives / (true_positives + false_positives + false_negatives)
         accuracies.append(accuracy)
+        print(accuracy)
     mean_accuracy = sum(accuracies) / len(accuracies)
-
+    
     return mean_accuracy
 
 # Test
