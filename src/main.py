@@ -2,9 +2,7 @@ import os
 import time
 import torch
 import argparse
-import importlib
 import numpy as np
-from functools import reduce
 
 import utils
 import network
@@ -34,7 +32,7 @@ def main(argv=None):
     parser.add_argument('--batch-size', default=64, type=int, required=False,
                         help='Number of samples per batch to load (default=%(default)s)')
     # training args
-    parser.add_argument('--nepochs', default=1, type=int, required=False,
+    parser.add_argument('--nepochs', default=5, type=int, required=False,
                         help='Number of epochs per training session (default=%(default)s)')
     parser.add_argument('--lr', default=0.01, type=float, required=False,
                         help='Starting learning rate (default=%(default)s)')

@@ -9,18 +9,18 @@ class SimpleNet(nn.Module):
     def __init__(self, in_channels=1, **kwargs):
         super().__init__()
         # main part of the network
-        self.conv1 = nn.Conv1d(in_channels, 16, 7)
-        self.conv2 = nn.Conv1d(16, 32, 5)
-        self.conv3 = nn.Conv1d(32, 32, 5)
-        self.conv4 = nn.Conv1d(32, 16, 5)
-        self.lastconv = nn.Conv1d(16, 1, 3)
+        self.conv1 = nn.Conv1d(in_channels, 16, 7, padding='same')
+        self.conv2 = nn.Conv1d(16, 32, 5, padding='same')
+        self.conv3 = nn.Conv1d(32, 32, 5, padding='same')
+        self.conv4 = nn.Conv1d(32, 16, 5, padding='same')
+        self.conv5 = nn.Conv1d(16, 1, 3, padding='same')
 
     def forward(self, x):
         out = F.relu(self.conv1(x))
         out = F.relu(self.conv2(out))
         out = F.relu(self.conv3(out))
         out = F.relu(self.conv4(out))
-        out = F.relu(self.lastconv(out))
+        out = self.conv5(out)
         return out
 
     def get_copy(self):

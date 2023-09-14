@@ -46,14 +46,14 @@ class Learning_Appr:
             clock1 = time.time()
             train_loss, train_acc = self.eval(trn_loader)
             clock2 = time.time()
-            print('| Epoch {:3d}, time={:5.1f}s/{:5.1f}s | Train: loss={:.3f}, acc={:5.1f}% |'.format(
+            print('| Epoch {:3d}, time={:5.1f}s/{:5.1f}s | Train: loss={:.3f}, met={:5.1f}% |'.format(
                 e + 1, clock1 - clock0, clock2 - clock1, train_loss, 100 * train_acc), end='')
 
             # Valid
             clock3 = time.time()
             valid_loss, valid_acc = self.eval(val_loader)
             clock4 = time.time()
-            print(' Valid: time={:5.1f}s loss={:.3f}, acc={:5.1f}% |'.format(
+            print(' Valid: time={:5.1f}s loss={:.3f}, met={:5.1f}% |'.format(
                 clock4 - clock3, valid_loss, 100 * valid_acc), end='')
 
             # Adapt learning rate - patience scheme - early stopping regularization
