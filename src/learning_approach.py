@@ -2,6 +2,7 @@ import time
 import torch
 import numpy as np
 from argparse import ArgumentParser
+import torch.nn.functional as F
 
 
 class Learning_Appr:
@@ -18,6 +19,8 @@ class Learning_Appr:
         self.momentum = momentum
         self.wd = wd
         self.optimizer = None
+        self.trn_loss_list = []
+        self.val_loss_list = []
 
     @staticmethod
     def extra_parser(args):
@@ -37,21 +40,23 @@ class Learning_Appr:
         best_model = self.model.get_copy()
 
         self.optimizer = self._get_optimizer()
-
+    
         # Loop epochs
         for e in range(self.nepochs):
             # Train
             clock0 = time.time()
             self.train_epoch(trn_loader)
             clock1 = time.time()
-            train_loss, train_acc = self.eval(trn_loader)
+            train_loss, train_acc, predictions = self.eval(trn_loader)
+            self.trn_loss_list.append(train_loss)
             clock2 = time.time()
             print('| Epoch {:3d}, time={:5.1f}s/{:5.1f}s | Train: loss={:.3f}, met={:5.1f}% |'.format(
                 e + 1, clock1 - clock0, clock2 - clock1, train_loss, 100 * train_acc), end='')
 
             # Valid
             clock3 = time.time()
-            valid_loss, valid_acc = self.eval(val_loader)
+            valid_loss, valid_acc, predictions = self.eval(val_loader)
+            self.val_loss_list.append(valid_loss)
             clock4 = time.time()
             print(' Valid: time={:5.1f}s loss={:.3f}, met={:5.1f}% |'.format(
                 clock4 - clock3, valid_loss, 100 * valid_acc), end='')
@@ -93,23 +98,85 @@ class Learning_Appr:
             loss.backward()
             self.optimizer.step()
 
-    def eval(self, val_loader):
-        """Contains the evaluation code"""
+    # def eval(self, val_loader):
+    #     """Contains the evaluation code"""
+    #     with torch.no_grad():
+    #         total_loss, total_num = 0, 0
+    #         self.model.eval()
+    #         for images, targets in val_loader:
+    #             # Forward current model
+    #             outputs = self.model(images.to(self.device))
+    #             loss = self.criterion(outputs, targets.to(self.device))
+    #             # Metric
+    #             # hits = (outputs[0].argmax(1) == targets.to(self.device)).float()
+    #             # Log
+    #             total_loss += loss.item() * len(targets)
+    #             # total_acc += hits.sum().item()
+    #             total_num += len(targets)
+        
+    #     return total_loss / total_num, 0.0
+
+
+    def eval(self, dataloader):
+        self.model.eval()
+        total_loss, correct_predictions, total_predictions = 0.0, 0, 0
+        predictions_list = []
         with torch.no_grad():
-            total_loss, total_num = 0, 0
-            self.model.eval()
-            for images, targets in val_loader:
-                # Forward current model
-                outputs = self.model(images.to(self.device))
-                loss = self.criterion(outputs, targets.to(self.device))
-                # Metric
-                # hits = (outputs[0].argmax(1) == targets.to(self.device)).float()
-                # Log
-                total_loss += loss.item() * len(targets)
-                # total_acc += hits.sum().item()
-                total_num += len(targets)
-        return total_loss / total_num, 0.0
+            for inputs, targets in dataloader:
+
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
+                total_loss += loss.item()
+
+                predicted_classes = torch.argmax(outputs, dim=1, keepdim=True)
+                predictions_list.append(predicted_classes)
+
+
+                correct_predictions += (predicted_classes == targets).sum().item()
+
+                total_predictions += targets.numel()
+            
+
+        average_loss = total_loss / len(dataloader)
+        accuracy = correct_predictions / total_predictions
+
+        return average_loss, accuracy, predictions_list
+
+
+
 
     def criterion(self, outputs, targets):
         """Returns the loss value"""
-        return torch.nn.functional.mse_loss(outputs, targets)
+
+    ## Cross Entropy Loss
+        # Class 0 is dominant and classes 1-5 are of interest
+        weights = torch.tensor([0.1, 1.0, 1.0, 1.0, 1.0, 1.0]).to(self.device)
+        criterion = torch.nn.CrossEntropyLoss(weight=weights)
+        targets = targets.squeeze(1).long()
+
+    ## Divergence Loss
+        # criterion = torch.nn.KLDivLoss()
+        # outputs = F.softmax(outputs, dim=1)
+        # targets = torch.nn.functional.one_hot(targets.long(), num_classes=6)
+        # targets = targets.transpose(1,3).squeeze().float()
+
+    ## BCE Loss
+        # criterion = torch.nn.BCELoss()
+        # ouputs = torch.argmax(outputs, dim=1, keepdim=True)
+        # outputs = torch.nn.functional.one_hot(outputs.long(), num_classes=6)
+        # outputs = outputs.transpose(1,3).squeeze().float()
+        # targets = torch.nn.functional.one_hot(targets.long(), num_classes=6)
+        # targets = targets.transpose(1,3).squeeze().float()
+
+    ## MCE Loss
+        # outputs = F.softmax(outputs, dim=1)
+        # targets = torch.nn.functional.one_hot(targets.long(), num_classes=6)
+        # targets = targets.transpose(1,3).squeeze().float()
+        # criterion = torch.nn.functional.mse_loss(outputs,targets)
+
+
+        return criterion(outputs,targets)
+
+

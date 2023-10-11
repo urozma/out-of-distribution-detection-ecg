@@ -34,9 +34,9 @@ class MemoryDataset(Dataset):
 def get_data():
     """Prepare data: dataset splits"""
 
-    t, signal_matrix, target_matrix = dataset(1600)
+    t, signal_matrix, target_matrix = dataset(1505)
 
-    trn_tuple, val_tuple, tst_tuple = split_dataset(signal_matrix, target_matrix, [1000, 100, 500])
+    trn_tuple, val_tuple, tst_tuple = split_dataset(signal_matrix, target_matrix, [1000, 500, 5])
 
     # initialize data structure
     all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
