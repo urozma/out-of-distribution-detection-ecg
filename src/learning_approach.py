@@ -133,14 +133,21 @@ class Learning_Appr:
                 predicted_classes = torch.argmax(outputs, dim=1, keepdim=True)
                 predictions_list.append(predicted_classes)
 
+                # Exclude samples with target value 0
+                mask = targets != 0
 
-                correct_predictions += (predicted_classes == targets).sum().item()
+                correct_predictions += (predicted_classes[mask] == targets[mask]).sum().item()
+                total_predictions += mask.sum().item()
 
-                total_predictions += targets.numel()
+
+                #correct_predictions += (predicted_classes == targets).sum().item()
+                #total_predictions += targets.numel()
             
 
         average_loss = total_loss / len(dataloader)
-        accuracy = correct_predictions / total_predictions
+        #accuracy = correct_predictions / total_predictions
+
+        accuracy = correct_predictions / total_predictions if total_predictions != 0 else 0
 
         return average_loss, accuracy, predictions_list
 
