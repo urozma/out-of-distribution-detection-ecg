@@ -5,6 +5,45 @@ from argparse import ArgumentParser
 import torch.nn.functional as F
 
 
+# class DiceLoss(torch.nn.Module):
+#     def __init__(self):
+#         super(DiceLoss, self).__init__()
+
+#     def forward(self, inputs, targets, smooth=1):
+#         # Flatten label and prediction tensors
+#         inputs = inputs.contiguous().view(-1)
+#         targets = targets.contiguous().view(-1)
+
+#         intersection = (inputs * targets).sum()
+#         total = inputs.sum() + targets.sum()
+#         dice = (2. * intersection + smooth) / (total + smooth)
+
+#         return 1 - dice
+    
+class CustomSequenceLoss(torch.nn.Module):
+    def __init__(self, weight=None):
+        super(CustomSequenceLoss, self).__init__()
+        self.weight = weight if weight is not None else torch.tensor([0.02, 1.0, 0.5, 1.0])
+
+    def forward(self, inputs, targets):
+        # Standard cross-entropy loss
+        ce_loss = torch.nn.CrossEntropyLoss(weight=self.weight)(inputs, targets)
+
+        # Custom penalty for sequence order violations
+        sequence_penalty = 0
+        for i in range(1, len(targets)):
+            # Check if there's a sequence order violation
+            violation = (targets[i] < targets[i - 1]).any()
+            if violation:
+                sequence_penalty += 0.05
+        
+        # Combine the losses
+        total_loss = ce_loss + sequence_penalty
+        return total_loss
+
+
+
+
 class Learning_Appr:
     """Basic class for implementing learning approaches"""
 
@@ -89,9 +128,9 @@ class Learning_Appr:
     def train_epoch(self, trn_loader):
         """Runs a single epoch"""
         self.model.train()
-        for images, targets in trn_loader:
+        for signals, targets in trn_loader:
             # Forward current model
-            outputs = self.model(images.to(self.device))
+            outputs = self.model(signals.to(self.device))
             loss = self.criterion(outputs, targets.to(self.device))
             # Backward
             self.optimizer.zero_grad()
@@ -152,16 +191,8 @@ class Learning_Appr:
         return average_loss, accuracy, predictions_list
 
 
-
-
     def criterion(self, outputs, targets):
         """Returns the loss value"""
-
-    ## Cross Entropy Loss
-        # Class 0 is dominant and classes 1-5 are of interest
-        weights = torch.tensor([0.1, 1.0, 1.0, 1.0, 1.0, 1.0]).to(self.device)
-        criterion = torch.nn.CrossEntropyLoss(weight=weights)
-        targets = targets.squeeze(1).long()
 
     ## Divergence Loss
         # criterion = torch.nn.KLDivLoss()
@@ -183,7 +214,28 @@ class Learning_Appr:
         # targets = targets.transpose(1,3).squeeze().float()
         # criterion = torch.nn.functional.mse_loss(outputs,targets)
 
+    # ## Dice Loss
+    #     outputs_1 = F.softmax(outputs, dim=1)
+    #     targets_1 = torch.nn.functional.one_hot(targets.long(), num_classes=4)
+    #     criterion = DiceLoss()
+    #     loss_1 = criterion(outputs_1, targets_1) 
 
-        return criterion(outputs,targets)
+    # ## Cross Entropy Loss
+    #     weights = torch.tensor([0.02, 1.0, 1.0, 1.0]).to(self.device)
+    #     targets = targets.squeeze(1).long()
+    #     criterion= torch.nn.CrossEntropyLoss(weight=weights)
+    #     loss_2 = criterion(outputs, targets)
+
+    # ## Combined Loss
+    #     loss = 0.5 * loss_1 + 0.5 * loss_2
+    #     return loss
+    
+    ## Dice Loss
+        targets = targets.squeeze(1).long()
+        criterion = CustomSequenceLoss()
+        loss = criterion(outputs, targets) 
+
+
+        return loss
 
 

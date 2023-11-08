@@ -1,6 +1,6 @@
 import torch
-import random
 import numpy as np
+import pandas as pd
 from torch.utils import data
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
@@ -11,8 +11,6 @@ class MemoryDataset(Dataset):
 
     def __init__(self, data, transform):
         """Initialization"""
-        # self.targets = data['y']
-        # self.inputs = data['x']
         self.targets = [torch.FloatTensor(elem) for elem in data['y']]
         self.inputs = [torch.FloatTensor(elem) for elem in data['x']]
         self.transform = transform
@@ -28,22 +26,47 @@ class MemoryDataset(Dataset):
         # x = self.transform(x)
         y = self.targets[index]
         y = torch.unsqueeze(y, dim=0)
+        
         return x, y
 
-
+    
 def get_data():
     """Prepare data: dataset splits"""
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv('ludb_lead_ii_data_2.csv', header=None)
 
-    t, signal_matrix, target_matrix = dataset(1505)
+    # Assuming each signal has 5000 entries
+    signal_length = 3000
 
-    trn_tuple, val_tuple, tst_tuple = split_dataset(signal_matrix, target_matrix, [1000, 500, 5])
+    # Calculate the number of signals
+    num_signals = df.shape[0] // signal_length
 
-    # initialize data structure
-    all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
-                'val': {'x': val_tuple[0], 'y': val_tuple[1]},
-                'tst': {'x': tst_tuple[0], 'y': tst_tuple[1]}}
+    # Extract the signal values and target values without column names
+    signals = df.iloc[:num_signals * signal_length, 1].to_numpy().reshape(-1, signal_length)
+    targets = df.iloc[:num_signals * signal_length, 2].to_numpy().reshape(-1, signal_length)
 
-    return all_data
+    trn_tuple, val_tuple, tst_tuple = split_dataset(signals, targets, [120, 55, 1])
+
+    trn_tuple_seg, _, _ = segment_heartbeats(trn_tuple)
+    val_tuple_seg, _, _ = segment_heartbeats(val_tuple)
+    tst_tuple_seg, tst_start, original_lengths, = segment_heartbeats(tst_tuple)
+
+
+    # t, signal_matrix, target_matrix = dataset(1505)
+
+    # trn_tuple, val_tuple, tst_tuple = split_dataset(signal_matrix, target_matrix, [1000, 500, 5])
+    #initialize data structure
+    all_data = {'trn': {'x': trn_tuple_seg[0], 'y': trn_tuple_seg[1]},
+                'val': {'x': val_tuple_seg[0], 'y': val_tuple_seg[1]},
+                'tst': {'x': tst_tuple_seg[0], 'y': tst_tuple_seg[1]}}
+
+    # all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
+    #             'val': {'x': val_tuple[0], 'y': val_tuple[1]},
+    #             'tst': {'x': tst_tuple[0], 'y': tst_tuple[1]}}
+
+    return all_data, tst_start, original_lengths, 
+
+
 
 
 def get_loaders(batch_sz, num_work, pin_mem):
@@ -53,7 +76,7 @@ def get_loaders(batch_sz, num_work, pin_mem):
     trn_transform, tst_transform = get_transforms()
 
     # dataset
-    all_data = get_data()
+    all_data, tst_start, original_lengths, = get_data()
     trn_dset = MemoryDataset(all_data['trn'], trn_transform)
     val_dset = MemoryDataset(all_data['val'], tst_transform)
     tst_dset = MemoryDataset(all_data['tst'], tst_transform)
@@ -62,7 +85,7 @@ def get_loaders(batch_sz, num_work, pin_mem):
     trn_load = data.DataLoader(trn_dset, batch_size=batch_sz, shuffle=True, num_workers=num_work, pin_memory=pin_mem)
     val_load = data.DataLoader(val_dset, batch_size=batch_sz, shuffle=False, num_workers=num_work, pin_memory=pin_mem)
     tst_load = data.DataLoader(tst_dset, batch_size=batch_sz, shuffle=False, num_workers=num_work, pin_memory=pin_mem)
-    return trn_load, val_load, tst_load
+    return trn_load, val_load, tst_load, tst_start, original_lengths
 
 
 def get_transforms():
@@ -82,92 +105,6 @@ def get_transforms():
     return transforms.Compose(trn_transform_list), transforms.Compose(tst_transform_list)
 
 
-def ecg_signal_generator(heartbeat, duration):
-    # Sampling frequency
-    fs = 300
-
-    # Duration of a single beat
-    beat_duration = 60 / heartbeat  # Rough duration for one heart beat
-
-    # Define time array for a single beat
-    t_single = np.linspace(0, beat_duration, int(fs * beat_duration), endpoint=False)
-
-    # For whole duration
-    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
-
-    # Timestamps where the means of the waves will be
-    means = [0.15, 0.35, 0.4, 0.45, 0.6]
-
-    # Gaussian models for P, Q, R, S, T waves
-    P = np.exp(-(t_single - means[0]) ** 2 / (2 * 0.03 ** 2))
-    Q = np.exp(-(t_single - means[1]) ** 2 / (2 * 0.005 ** 2))
-    R = np.exp(-(t_single - means[2]) ** 2 / (2 * 0.02 ** 2))
-    S = np.exp(-(t_single - means[3]) ** 2 / (2 * 0.005 ** 2))
-    T = np.exp(-(t_single - means[4]) ** 2 / (2 * 0.02 ** 2))
-
-    # Turn timestamp array into indices
-    def get_closest_index(time, t):
-        return min(range(len(t)), key=lambda i: abs(t[i] - time))
-
-    # Calculate the number of beats in the duration
-    num_beats = int(duration / beat_duration)
-
-    # Create a target array for the first beat
-    target_single = [0] * len(t_single)
-    for i, a in enumerate(means):
-        index = get_closest_index(a, t)
-        target_single[index] = i + 1
-
-    beat_duration_index = get_closest_index(beat_duration, t)
-    index = 0
-
-    ecg_signal = []
-    target = []
-
-    for i in range(num_beats + 1):
-        # Construct a single heartbeat waveform
-        P_height = 0.001 * random.randrange(5, 25)
-        R_height = 0.01 * random.randrange(23, 26)
-        Q_height = 0.0001 * random.randrange(int(1500 * R_height), int(2000 * R_height))
-        S_height = 0.001 * random.randrange(20, 30)
-        T_height = 0.0001 * random.randrange(int(1200 * R_height), int(2000 * R_height))
-
-        single_beat = P_height * P - Q_height * Q + R_height * R - S_height * S + T_height * T
-        ecg_signal.extend(single_beat)
-        target.extend(target_single)
-
-    # To match arrays
-    difference = len(t) - len(ecg_signal)
-    ecg_signal = ecg_signal[:difference]
-    target = target[:difference]
-
-    # Add noise to signal
-    def add_noise(signal, scale):
-        noise = np.random.normal(0, scale, len(signal))
-        noisy_signal = signal + noise
-        return noisy_signal
-
-    noisy_ecg = add_noise(ecg_signal, 0.004)
-    return t, noisy_ecg, target
-
-
-# Create a dataset with the created ECG function
-def dataset(samples):
-    signal_matrix = []
-    target_matrix = []
-
-    for s in range(samples):
-        normal_heartbeat = random.randrange(60, 100)
-        t, ecg_signal, target = ecg_signal_generator(normal_heartbeat, 5)
-
-        signal_matrix.append(ecg_signal)
-        target_matrix.append(target)
-
-    signal_matrix = np.array(signal_matrix)
-    target_matrix = np.array(target_matrix)
-
-    return t, signal_matrix, target_matrix
-
 
 # Split dataset into pairs of training, validation and test data with their target values
 def split_dataset(dataset, target, split):
@@ -184,3 +121,84 @@ def split_dataset(dataset, target, split):
     test_tuple = (test_data, test_target)
 
     return train_tuple, val_tuple, test_tuple
+
+
+# def segment_heartbeats(data_tuple, window_length=300):
+#     signals, targets = data_tuple
+#     heartbeats_x = []
+#     heartbeats_y = []
+#     start_indices = []  # To save the starting index of each heartbeat segment
+
+#     for signal, target in zip(signals, targets):
+#         r_peaks_indices = np.where(target == 2)[0]
+
+#         for index in r_peaks_indices:
+#             start = index - window_length // 2
+#             end = start + window_length
+
+#             # # Correct the indices if they go out of bounds
+#             # if start < 0:
+#             #     start = 0
+#             # if end > len(signal):
+#             #     start = len(signal) - window_length
+#             #     end = len(signal)
+
+#             # Extract the heartbeat segment
+#             heartbeat_signal = signal[start:end]
+#             heartbeat_target = target[start:end]
+
+#             if len(heartbeat_signal) < window_length:
+#                 # Pad the heartbeat signal if it's shorter than the window length
+#                 heartbeat_signal = np.pad(heartbeat_signal, (0, window_length - len(heartbeat_signal)), 'constant')
+#                 heartbeat_target = np.pad(heartbeat_target, (0, window_length - len(heartbeat_target)), 'constant')
+
+#             heartbeats_x.append(heartbeat_signal)
+#             heartbeats_y.append(heartbeat_target)
+#             start_indices.append(start)  # Save the start index
+
+#     return (np.array(heartbeats_x), np.array(heartbeats_y)), np.array(start_indices)
+
+def segment_heartbeats(data_tuple, window_length=300):
+    signals, targets = data_tuple
+    heartbeats_x = []
+    heartbeats_y = []
+    start_indices = []  # To save the starting index of each heartbeat segment
+    original_lengths = []  # To save the length of the original segment before padding
+
+    for signal, target in zip(signals, targets):
+        r_peaks_indices = np.where(target == 2)[0]
+
+        for index in r_peaks_indices:
+            start = index - window_length // 2
+            end = start + window_length
+
+            if start < 0:
+                start = 0
+            if end > len(signal):
+                end = len(signal)
+
+            # Extract the heartbeat segment
+            heartbeat_signal = signal[start:end]
+            heartbeat_target = target[start:end]
+
+            # Save the length of the original segment before any padding
+            original_length = len(heartbeat_signal)
+
+            if len(heartbeat_signal) < window_length:
+                # Pad the heartbeat signal if it's shorter than the window length
+                heartbeat_signal = np.pad(heartbeat_signal, (0, window_length - len(heartbeat_signal)), 'constant')
+                heartbeat_target = np.pad(heartbeat_target, (0, window_length - len(heartbeat_target)), 'constant')
+
+            heartbeats_x.append(heartbeat_signal)
+            heartbeats_y.append(heartbeat_target)
+            start_indices.append(start)
+            original_lengths.append(original_length)  # Save the original length
+
+    return (np.array(heartbeats_x), np.array(heartbeats_y)), np.array(start_indices), np.array(original_lengths)
+
+
+
+# Example usage:
+# Assuming 'signals_array' and 'targets_array' are your input 2D arrays:
+# segmented_data, start_indices = segment_heartbeats((signals_array, targets_array))
+

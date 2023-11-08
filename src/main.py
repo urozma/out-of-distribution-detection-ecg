@@ -4,7 +4,6 @@ import torch
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-
 import utils
 import network
 import learning_approach
@@ -31,12 +30,12 @@ def main(argv=None):
                         help='Number of subprocesses to use for dataloader (default=%(default)s)')
     parser.add_argument('--pin-memory', default=False, type=bool, required=False,
                         help='Copy Tensors into CUDA pinned memory before returning them (default=%(default)s)')
-    parser.add_argument('--batch-size', default=64, type=int, required=False,
+    parser.add_argument('--batch-size', default=16, type=int, required=False,
                         help='Number of samples per batch to load (default=%(default)s)')
 
     
     # training args
-    parser.add_argument('--nepochs', default=10, type=int, required=False,
+    parser.add_argument('--nepochs', default=1, type=int, required=False,
                         help='Number of epochs per training session (default=%(default)s)')
     parser.add_argument('--lr', default=0.01, type=float, required=False,
                         help='Starting learning rate (default=%(default)s)')
@@ -92,7 +91,7 @@ def main(argv=None):
 
     # Loaders
     utils.seed_everything(seed=args.seed)
-    trn_loader, val_loader, tst_loader = get_loaders(batch_sz=args.batch_size, num_work=args.num_workers,
+    trn_loader, val_loader, tst_loader, tst_start, original_lengths = get_loaders(batch_sz=args.batch_size, num_work=args.num_workers,
                                                      pin_mem=args.pin_memory)
 
     # Task
@@ -114,26 +113,87 @@ def main(argv=None):
     print('[Elapsed time = {:.1f} h]'.format((time.time() - tstart) / (60 * 60)))
     print('Done!')
 
-    t = np.linspace(0, 5, int(300 * 5), endpoint=False)
+    # def reconstruct_signal(segmented_tuple, start_indices, original_signal_length):
+    #     heartbeats_x, heartbeats_y = segmented_tuple
+    #     reconstructed_signal = np.zeros(original_signal_length)
+    #     reconstructed_targets = np.zeros(original_signal_length)
+
+    #     for segment_x, segment_y, start in zip(heartbeats_x, heartbeats_y, start_indices):
+    #         end = start + len(segment_x)
+    #         if start < 0:
+    #             segment_x = segment_x[-start:]
+    #             segment_y = segment_y[-start:]
+    #             start = 0
+    #         if end > original_signal_length-1:
+    #             segment_x = segment_x[:original_signal_length-end]
+    #             segment_y = segment_y[:original_signal_length-end]
+    #             end = original_signal_length-1
+    #         reconstructed_signal[start:end] = segment_x
+    #         reconstructed_targets[start:end] = segment_y
+
+    #     return (reconstructed_signal, reconstructed_targets)
+
+    def reconstruct_signal(segmented_tuple, start_indices, original_lengths, original_signal_length):
+        heartbeats_x, heartbeats_y = segmented_tuple
+        reconstructed_signal = np.zeros(original_signal_length)
+        reconstructed_targets = np.zeros(original_signal_length)
+
+        for segment_x, segment_y, start, orig_len in zip(heartbeats_x, heartbeats_y, start_indices, original_lengths):
+            # End index is calculated based on the original segment length
+            end = start + orig_len
+
+            # Avoid writing beyond the end of the signal
+            if end > original_signal_length:
+                end = original_signal_length
+                segment_x = segment_x[:end - start]
+                segment_y = segment_y[:end - start]
+
+            reconstructed_signal[start:end] = segment_x
+            reconstructed_targets[start:end] = segment_y
+
+        return reconstructed_signal, reconstructed_targets
+
+
+    #t = np.linspace(0, 5, int(300 * 5), endpoint=False)
     #indices = np.array(range(len(np.transpose(tst_loader.dataset[0][0]))))
-    indices = np.array(range(len(t)))
+    indices = np.array(range(3000))
 
     plt.figure(1)
     for i, sample in enumerate(tst_loader.dataset):
-        signal = np.transpose(sample[0])
+    # for i, sample in enumerate(reconstructed_tuple):
+        reconstructed_tuple = reconstruct_signal(sample, tst_start, original_lengths, 3000)
 
-        true_p = np.where(np.transpose(sample[1]) == 1)[0]
-        true_q = np.where(np.transpose(sample[1]) == 2)[0]
-        true_r = np.where(np.transpose(sample[1]) == 3)[0]
-        true_s = np.where(np.transpose(sample[1]) == 4)[0]
-        true_t = np.where(np.transpose(sample[1]) == 5)[0]
+        # signal = np.transpose(sample[0])
+
+        # true_p = np.where(np.transpose(sample[1]) == 1)[0]
+        # #true_q = np.where(np.transpose(sample[1]) == 2)[0]
+        # true_r = np.where(np.transpose(sample[1]) == 2)[0]
+        # #true_s = np.where(np.transpose(sample[1]) == 4)[0]
+        # true_t = np.where(np.transpose(sample[1]) == 3)[0]
+
+        # plt.subplot(len(tst_loader.dataset), 1, i+1)
+        # plt.plot(indices, signal)
+        # plt.scatter(indices[true_p], signal[true_p], marker='D', s=20, color='red', label='P-wave')
+        # #plt.scatter(indices[true_q], signal[true_q], marker='D', s=20, color='orange', label='Q-wave')
+        # plt.scatter(indices[true_r], signal[true_r], marker='D', s=20, color='green', label='R-wave')
+        # #plt.scatter(indices[true_s], signal[true_s], marker='D', s=20, color='blue', label='S-wave')
+        # plt.scatter(indices[true_t], signal[true_t], marker='D', s=20, color='pink', label='T-wave')
+
+
+        signal = np.transpose(reconstructed_tuple[0])
+
+        true_p = np.where(np.transpose(reconstructed_tuple[1]) == 1)[0]
+        #true_q = np.where(np.transpose(sample[1]) == 2)[0]
+        true_r = np.where(np.transpose(reconstructed_tuple[1]) == 2)[0]
+        #true_s = np.where(np.transpose(sample[1]) == 4)[0]
+        true_t = np.where(np.transpose(reconstructed_tuple[1]) == 3)[0]
 
         plt.subplot(len(tst_loader.dataset), 1, i+1)
         plt.plot(indices, signal)
         plt.scatter(indices[true_p], signal[true_p], marker='D', s=20, color='red', label='P-wave')
-        plt.scatter(indices[true_q], signal[true_q], marker='D', s=20, color='orange', label='Q-wave')
+        #plt.scatter(indices[true_q], signal[true_q], marker='D', s=20, color='orange', label='Q-wave')
         plt.scatter(indices[true_r], signal[true_r], marker='D', s=20, color='green', label='R-wave')
-        plt.scatter(indices[true_s], signal[true_s], marker='D', s=20, color='blue', label='S-wave')
+        #plt.scatter(indices[true_s], signal[true_s], marker='D', s=20, color='blue', label='S-wave')
         plt.scatter(indices[true_t], signal[true_t], marker='D', s=20, color='pink', label='T-wave')
 
     
@@ -147,18 +207,18 @@ def main(argv=None):
 
         #true_peaks = np.where(np.transpose(sample[1]) == 3)[0]
         predicted_p = np.where(np.transpose(predictions_list[0][i] == 1))[0]
-        predicted_q = np.where(np.transpose(predictions_list[0][i] == 2))[0]
-        predicted_r = np.where(np.transpose(predictions_list[0][i] == 3))[0]
-        predicted_s = np.where(np.transpose(predictions_list[0][i] == 4))[0]
-        predicted_t = np.where(np.transpose(predictions_list[0][i] == 5))[0]
+        #predicted_q = np.where(np.transpose(predictions_list[0][i] == 2))[0]
+        predicted_r = np.where(np.transpose(predictions_list[0][i] == 2))[0]
+        #predicted_s = np.where(np.transpose(predictions_list[0][i] == 4))[0]
+        predicted_t = np.where(np.transpose(predictions_list[0][i] == 3))[0]
 
 
         plt.subplot(len(tst_loader.dataset), 1, i+1)
         plt.plot(indices, signal)
         plt.scatter(indices[predicted_p], signal[predicted_p], marker='D', s=20, color='red', label='P-wave')
-        plt.scatter(indices[predicted_q], signal[predicted_q], marker='D', s=20, color='orange', label='Q-wave')
+        #plt.scatter(indices[predicted_q], signal[predicted_q], marker='D', s=20, color='orange', label='Q-wave')
         plt.scatter(indices[predicted_r], signal[predicted_r], marker='D', s=20, color='green', label='R-wave')
-        plt.scatter(indices[predicted_s], signal[predicted_s], marker='D', s=20, color='blue', label='S-wave')
+        #plt.scatter(indices[predicted_s], signal[predicted_s], marker='D', s=20, color='blue', label='S-wave')
         plt.scatter(indices[predicted_t], signal[predicted_t], marker='D', s=20, color='pink', label='T-wave')
 
     plt.suptitle('Test signals with marked predicted peaks')

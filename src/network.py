@@ -35,7 +35,7 @@ import torch
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels=1, num_classes=6, **kwargs):
+    def __init__(self, in_channels=1, num_classes=4, **kwargs):
         super(UNet, self).__init__()
 
         # Encoder
@@ -77,6 +77,9 @@ class UNet(nn.Module):
         # Final output
         out = self.final_conv(dec3)
         return out
+
+
+
 
     def get_copy(self):
         """Get weights from the model"""
