@@ -46,10 +46,9 @@ def get_data():
     targets = df.iloc[:num_signals * signal_length, 2].to_numpy().reshape(-1, signal_length)
 
     trn_tuple, val_tuple, tst_tuple = split_dataset(signals, targets, [120, 55, 1])
-
-    trn_tuple_seg, _, _ = segment_heartbeats(trn_tuple)
-    val_tuple_seg, _, _ = segment_heartbeats(val_tuple)
-    tst_tuple_seg, tst_start, original_lengths, = segment_heartbeats(tst_tuple)
+    trn_tuple_seg, _ = segment_heartbeats(trn_tuple)
+    val_tuple_seg, _ = segment_heartbeats(val_tuple)
+    tst_tuple_seg, reconstruction_info = segment_heartbeats(tst_tuple)
 
 
     # t, signal_matrix, target_matrix = dataset(1505)
@@ -64,7 +63,7 @@ def get_data():
     #             'val': {'x': val_tuple[0], 'y': val_tuple[1]},
     #             'tst': {'x': tst_tuple[0], 'y': tst_tuple[1]}}
 
-    return all_data, tst_start, original_lengths, 
+    return all_data, reconstruction_info
 
 
 
@@ -76,7 +75,7 @@ def get_loaders(batch_sz, num_work, pin_mem):
     trn_transform, tst_transform = get_transforms()
 
     # dataset
-    all_data, tst_start, original_lengths, = get_data()
+    all_data, reconstruction_info = get_data()
     trn_dset = MemoryDataset(all_data['trn'], trn_transform)
     val_dset = MemoryDataset(all_data['val'], tst_transform)
     tst_dset = MemoryDataset(all_data['tst'], tst_transform)
@@ -85,7 +84,7 @@ def get_loaders(batch_sz, num_work, pin_mem):
     trn_load = data.DataLoader(trn_dset, batch_size=batch_sz, shuffle=True, num_workers=num_work, pin_memory=pin_mem)
     val_load = data.DataLoader(val_dset, batch_size=batch_sz, shuffle=False, num_workers=num_work, pin_memory=pin_mem)
     tst_load = data.DataLoader(tst_dset, batch_size=batch_sz, shuffle=False, num_workers=num_work, pin_memory=pin_mem)
-    return trn_load, val_load, tst_load, tst_start, original_lengths
+    return trn_load, val_load, tst_load, reconstruction_info
 
 
 def get_transforms():
@@ -158,47 +157,67 @@ def split_dataset(dataset, target, split):
 
 #     return (np.array(heartbeats_x), np.array(heartbeats_y)), np.array(start_indices)
 
-def segment_heartbeats(data_tuple, window_length=300):
+# def segment_heartbeats(data_tuple, window_length=300):
+#     signals, targets = data_tuple
+#     heartbeats_x = []
+#     heartbeats_y = []
+#     start_indices = []  # To save the starting index of each heartbeat segment
+#     original_lengths = []  # To save the length of the original segment before padding
+#
+#     for signal, target in zip(signals, targets):
+#         r_peaks_indices = np.where(target == 2)[0]
+#
+#         for index in r_peaks_indices:
+#             start = index - window_length // 2
+#             end = start + window_length
+#
+#             if start < 0:
+#                 start = 0
+#             if end > len(signal):
+#                 end = len(signal)
+#
+#             # Extract the heartbeat segment
+#             heartbeat_signal = signal[start:end]
+#             heartbeat_target = target[start:end]
+#
+#             # Save the length of the original segment before any padding
+#             original_length = len(heartbeat_signal)
+#
+#             if len(heartbeat_signal) < window_length:
+#                 # Pad the heartbeat signal if it's shorter than the window length
+#                 heartbeat_signal = np.pad(heartbeat_signal, (0, window_length - len(heartbeat_signal)), 'constant')
+#                 heartbeat_target = np.pad(heartbeat_target, (0, window_length - len(heartbeat_target)), 'constant')
+#
+#             heartbeats_x.append(heartbeat_signal)
+#             heartbeats_y.append(heartbeat_target)
+#             start_indices.append(start)
+#             original_lengths.append(original_length)  # Save the original length
+#
+#     return (np.array(heartbeats_x), np.array(heartbeats_y)), np.array(start_indices), np.array(original_lengths)
+
+def segment_heartbeats(data_tuple):
     signals, targets = data_tuple
-    heartbeats_x = []
-    heartbeats_y = []
-    start_indices = []  # To save the starting index of each heartbeat segment
-    original_lengths = []  # To save the length of the original segment before padding
+    segmented_signals = []
+    segmented_targets = []
+    reconstruction_info = []
 
     for signal, target in zip(signals, targets):
-        r_peaks_indices = np.where(target == 2)[0]
+        r_peak_indices = np.where(target == 2)[0]
+        for r_peak in r_peak_indices:
+            start = max(0, r_peak - 250)
+            end = min(len(signal), r_peak + 250)
+            segment = signal[start:end]
+            target_segment = target[start:end]
 
-        for index in r_peaks_indices:
-            start = index - window_length // 2
-            end = start + window_length
+            # Padding if necessary
+            if len(segment) < 500:
+                pad_size = 500 - len(segment)
+                segment = np.pad(segment, (0, pad_size), 'constant')
+                target_segment = np.pad(target_segment, (0, pad_size), 'constant')
 
-            if start < 0:
-                start = 0
-            if end > len(signal):
-                end = len(signal)
+            segmented_signals.append(segment)
+            segmented_targets.append(target_segment)
+            reconstruction_info.append((start, end))
 
-            # Extract the heartbeat segment
-            heartbeat_signal = signal[start:end]
-            heartbeat_target = target[start:end]
-
-            # Save the length of the original segment before any padding
-            original_length = len(heartbeat_signal)
-
-            if len(heartbeat_signal) < window_length:
-                # Pad the heartbeat signal if it's shorter than the window length
-                heartbeat_signal = np.pad(heartbeat_signal, (0, window_length - len(heartbeat_signal)), 'constant')
-                heartbeat_target = np.pad(heartbeat_target, (0, window_length - len(heartbeat_target)), 'constant')
-
-            heartbeats_x.append(heartbeat_signal)
-            heartbeats_y.append(heartbeat_target)
-            start_indices.append(start)
-            original_lengths.append(original_length)  # Save the original length
-
-    return (np.array(heartbeats_x), np.array(heartbeats_y)), np.array(start_indices), np.array(original_lengths)
-
-
-
-# Example usage:
-# Assuming 'signals_array' and 'targets_array' are your input 2D arrays:
-# segmented_data, start_indices = segment_heartbeats((signals_array, targets_array))
+    return (np.array(segmented_signals), np.array(segmented_targets)), reconstruction_info
 
