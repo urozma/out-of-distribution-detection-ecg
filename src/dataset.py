@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 import pandas as pd
 from torch.utils import data
 from torch.utils.data import Dataset
@@ -33,8 +32,9 @@ class MemoryDataset(Dataset):
 def get_data():
     """Prepare data: dataset splits"""
     # Load the CSV file into a pandas DataFrame
-    df = pd.read_csv('ludb_lead_ii_data_2.csv', header=None)
-
+    df_all = pd.read_csv('ludb_lead_ii_data_3.csv', header=None)
+    df = df_all.loc[df_all.iloc[:, 3] == 'Sinus rhythm']
+    print(len(df))
     # Assuming each signal has 5000 entries
     signal_length = 3000
 
@@ -45,28 +45,17 @@ def get_data():
     signals = df.iloc[:num_signals * signal_length, 1].to_numpy().reshape(-1, signal_length)
     targets = df.iloc[:num_signals * signal_length, 2].to_numpy().reshape(-1, signal_length)
 
-    trn_tuple, val_tuple, tst_tuple = split_dataset(signals, targets, [120, 55, 1])
-    trn_tuple_seg, _ = segment_heartbeats(trn_tuple)
-    val_tuple_seg, _ = segment_heartbeats(val_tuple)
-    tst_tuple_seg, reconstruction_info = segment_heartbeats(tst_tuple)
-
+    trn_tuple, val_tuple, tst_tuple = split_dataset(signals, targets)
 
     # t, signal_matrix, target_matrix = dataset(1505)
 
     # trn_tuple, val_tuple, tst_tuple = split_dataset(signal_matrix, target_matrix, [1000, 500, 5])
-    #initialize data structure
-    all_data = {'trn': {'x': trn_tuple_seg[0], 'y': trn_tuple_seg[1]},
-                'val': {'x': val_tuple_seg[0], 'y': val_tuple_seg[1]},
-                'tst': {'x': tst_tuple_seg[0], 'y': tst_tuple_seg[1]}}
+    # initialize data structure
+    all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
+                'val': {'x': val_tuple[0], 'y': val_tuple[1]},
+                'tst': {'x': tst_tuple[0], 'y': tst_tuple[1]}}
 
-    # all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
-    #             'val': {'x': val_tuple[0], 'y': val_tuple[1]},
-    #             'tst': {'x': tst_tuple[0], 'y': tst_tuple[1]}}
-
-    return all_data, reconstruction_info
-
-
-
+    return all_data
 
 def get_loaders(batch_sz, num_work, pin_mem):
     """Apply transformations to Dataset and create the DataLoaders for each task"""
@@ -75,7 +64,7 @@ def get_loaders(batch_sz, num_work, pin_mem):
     trn_transform, tst_transform = get_transforms()
 
     # dataset
-    all_data, reconstruction_info = get_data()
+    all_data = get_data()
     trn_dset = MemoryDataset(all_data['trn'], trn_transform)
     val_dset = MemoryDataset(all_data['val'], tst_transform)
     tst_dset = MemoryDataset(all_data['tst'], tst_transform)
@@ -84,7 +73,7 @@ def get_loaders(batch_sz, num_work, pin_mem):
     trn_load = data.DataLoader(trn_dset, batch_size=batch_sz, shuffle=True, num_workers=num_work, pin_memory=pin_mem)
     val_load = data.DataLoader(val_dset, batch_size=batch_sz, shuffle=False, num_workers=num_work, pin_memory=pin_mem)
     tst_load = data.DataLoader(tst_dset, batch_size=batch_sz, shuffle=False, num_workers=num_work, pin_memory=pin_mem)
-    return trn_load, val_load, tst_load, reconstruction_info
+    return trn_load, val_load, tst_load
 
 
 def get_transforms():
@@ -103,10 +92,15 @@ def get_transforms():
 
     return transforms.Compose(trn_transform_list), transforms.Compose(tst_transform_list)
 
-
-
 # Split dataset into pairs of training, validation and test data with their target values
-def split_dataset(dataset, target, split):
+def split_dataset(dataset, target):
+
+    tst_nr = 5
+    trn_nr = round(0.7*len(dataset))
+    val_nr = len(dataset)-tst_nr-trn_nr
+
+    split = [trn_nr,val_nr,tst_nr]
+
     train_data = dataset[:split[0]]
     train_target = target[:split[0]]
     train_tuple = (train_data, train_target)
@@ -120,104 +114,4 @@ def split_dataset(dataset, target, split):
     test_tuple = (test_data, test_target)
 
     return train_tuple, val_tuple, test_tuple
-
-
-# def segment_heartbeats(data_tuple, window_length=300):
-#     signals, targets = data_tuple
-#     heartbeats_x = []
-#     heartbeats_y = []
-#     start_indices = []  # To save the starting index of each heartbeat segment
-
-#     for signal, target in zip(signals, targets):
-#         r_peaks_indices = np.where(target == 2)[0]
-
-#         for index in r_peaks_indices:
-#             start = index - window_length // 2
-#             end = start + window_length
-
-#             # # Correct the indices if they go out of bounds
-#             # if start < 0:
-#             #     start = 0
-#             # if end > len(signal):
-#             #     start = len(signal) - window_length
-#             #     end = len(signal)
-
-#             # Extract the heartbeat segment
-#             heartbeat_signal = signal[start:end]
-#             heartbeat_target = target[start:end]
-
-#             if len(heartbeat_signal) < window_length:
-#                 # Pad the heartbeat signal if it's shorter than the window length
-#                 heartbeat_signal = np.pad(heartbeat_signal, (0, window_length - len(heartbeat_signal)), 'constant')
-#                 heartbeat_target = np.pad(heartbeat_target, (0, window_length - len(heartbeat_target)), 'constant')
-
-#             heartbeats_x.append(heartbeat_signal)
-#             heartbeats_y.append(heartbeat_target)
-#             start_indices.append(start)  # Save the start index
-
-#     return (np.array(heartbeats_x), np.array(heartbeats_y)), np.array(start_indices)
-
-# def segment_heartbeats(data_tuple, window_length=300):
-#     signals, targets = data_tuple
-#     heartbeats_x = []
-#     heartbeats_y = []
-#     start_indices = []  # To save the starting index of each heartbeat segment
-#     original_lengths = []  # To save the length of the original segment before padding
-#
-#     for signal, target in zip(signals, targets):
-#         r_peaks_indices = np.where(target == 2)[0]
-#
-#         for index in r_peaks_indices:
-#             start = index - window_length // 2
-#             end = start + window_length
-#
-#             if start < 0:
-#                 start = 0
-#             if end > len(signal):
-#                 end = len(signal)
-#
-#             # Extract the heartbeat segment
-#             heartbeat_signal = signal[start:end]
-#             heartbeat_target = target[start:end]
-#
-#             # Save the length of the original segment before any padding
-#             original_length = len(heartbeat_signal)
-#
-#             if len(heartbeat_signal) < window_length:
-#                 # Pad the heartbeat signal if it's shorter than the window length
-#                 heartbeat_signal = np.pad(heartbeat_signal, (0, window_length - len(heartbeat_signal)), 'constant')
-#                 heartbeat_target = np.pad(heartbeat_target, (0, window_length - len(heartbeat_target)), 'constant')
-#
-#             heartbeats_x.append(heartbeat_signal)
-#             heartbeats_y.append(heartbeat_target)
-#             start_indices.append(start)
-#             original_lengths.append(original_length)  # Save the original length
-#
-#     return (np.array(heartbeats_x), np.array(heartbeats_y)), np.array(start_indices), np.array(original_lengths)
-
-def segment_heartbeats(data_tuple):
-    signals, targets = data_tuple
-    segmented_signals = []
-    segmented_targets = []
-    reconstruction_info = []
-
-    for signal, target in zip(signals, targets):
-        r_peak_indices = np.where(target == 2)[0]
-        for r_peak in r_peak_indices:
-            start = max(0, r_peak - 250)
-            end = min(len(signal), r_peak + 250)
-            segment = signal[start:end]
-            target_segment = target[start:end]
-
-            # Padding if necessary
-            if len(segment) < 500:
-                pad_size = 500 - len(segment)
-                segment = np.pad(segment, (0, pad_size), 'constant')
-                target_segment = np.pad(target_segment, (0, pad_size), 'constant')
-
-            segmented_signals.append(segment)
-            segmented_targets.append(target_segment)
-            reconstruction_info.append((start, end))
-
-    return (np.array(segmented_signals), np.array(segmented_targets)), reconstruction_info
 

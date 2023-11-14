@@ -2,45 +2,39 @@ import time
 import torch
 import numpy as np
 from argparse import ArgumentParser
-import torch.nn.functional as F
+import torch
+import torch.nn as nn
 
-
-# class DiceLoss(torch.nn.Module):
-#     def __init__(self):
-#         super(DiceLoss, self).__init__()
-
-#     def forward(self, inputs, targets, smooth=1):
-#         # Flatten label and prediction tensors
-#         inputs = inputs.contiguous().view(-1)
-#         targets = targets.contiguous().view(-1)
-
-#         intersection = (inputs * targets).sum()
-#         total = inputs.sum() + targets.sum()
-#         dice = (2. * intersection + smooth) / (total + smooth)
-
-#         return 1 - dice
-    
 class CustomSequenceLoss(torch.nn.Module):
     def __init__(self, weight=None):
         super(CustomSequenceLoss, self).__init__()
-        self.weight = weight if weight is not None else torch.tensor([0.02, 1.0, 0.5, 1.0])
+        self.weight = weight if weight is not None else torch.tensor([0.03, 1, 0.45, 1])
 
     def forward(self, inputs, targets):
         # Standard cross-entropy loss
         ce_loss = torch.nn.CrossEntropyLoss(weight=self.weight)(inputs, targets)
 
-        # Custom penalty for sequence order violations
+        # Custom penalty for sequence order violations considering the repeating pattern
         sequence_penalty = 0
-        for i in range(1, len(targets)):
-            # Check if there's a sequence order violation
-            violation = (targets[i] < targets[i - 1]).any()
-            if violation:
-                sequence_penalty += 0.05
-        
+        expected_next_value = 1
+
+        for i in range(targets.size(1)):
+            if i == 0:
+                # Set the initial expected value based on the first element of the sequence
+                expected_next_value = (targets[:, 0] % 3) + 1
+            else:
+                # For subsequent elements, calculate sequence violation penalty as before
+                prev_elements = targets[:, i - 1]
+                current_elements = targets[:, i]
+                violations = (current_elements != 0) & (current_elements != expected_next_value)
+                sequence_penalty += 0.00 * violations.sum()
+
+            # Update expected value for next element in the sequence
+            expected_next_value = (expected_next_value % 3) + 1
+
         # Combine the losses
         total_loss = ce_loss + sequence_penalty
         return total_loss
-
 
 
 
