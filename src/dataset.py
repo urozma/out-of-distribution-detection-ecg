@@ -32,9 +32,9 @@ class MemoryDataset(Dataset):
 def get_data():
     """Prepare data: dataset splits"""
     # Load the CSV file into a pandas DataFrame
-    df_all = pd.read_csv('ludb_lead_ii_data_3.csv', header=None)
+    df_all = pd.read_csv('ludb_lead_ii_data.csv', header=None)
     df = df_all.loc[df_all.iloc[:, 3] == 'Sinus rhythm']
-    print(len(df))
+
     # Assuming each signal has 5000 entries
     signal_length = 3000
 

@@ -1,42 +1,7 @@
 import time
-import torch
 import numpy as np
 from argparse import ArgumentParser
 import torch
-import torch.nn as nn
-
-class CustomSequenceLoss(torch.nn.Module):
-    def __init__(self, weight=None):
-        super(CustomSequenceLoss, self).__init__()
-        self.weight = weight if weight is not None else torch.tensor([0.03, 1, 0.45, 1])
-
-    def forward(self, inputs, targets):
-        # Standard cross-entropy loss
-        ce_loss = torch.nn.CrossEntropyLoss(weight=self.weight)(inputs, targets)
-
-        # Custom penalty for sequence order violations considering the repeating pattern
-        sequence_penalty = 0
-        expected_next_value = 1
-
-        for i in range(targets.size(1)):
-            if i == 0:
-                # Set the initial expected value based on the first element of the sequence
-                expected_next_value = (targets[:, 0] % 3) + 1
-            else:
-                # For subsequent elements, calculate sequence violation penalty as before
-                prev_elements = targets[:, i - 1]
-                current_elements = targets[:, i]
-                violations = (current_elements != 0) & (current_elements != expected_next_value)
-                sequence_penalty += 0.00 * violations.sum()
-
-            # Update expected value for next element in the sequence
-            expected_next_value = (expected_next_value % 3) + 1
-
-        # Combine the losses
-        total_loss = ce_loss + sequence_penalty
-        return total_loss
-
-
 
 class Learning_Appr:
     """Basic class for implementing learning approaches"""
@@ -131,24 +96,6 @@ class Learning_Appr:
             loss.backward()
             self.optimizer.step()
 
-    # def eval(self, val_loader):
-    #     """Contains the evaluation code"""
-    #     with torch.no_grad():
-    #         total_loss, total_num = 0, 0
-    #         self.model.eval()
-    #         for images, targets in val_loader:
-    #             # Forward current model
-    #             outputs = self.model(images.to(self.device))
-    #             loss = self.criterion(outputs, targets.to(self.device))
-    #             # Metric
-    #             # hits = (outputs[0].argmax(1) == targets.to(self.device)).float()
-    #             # Log
-    #             total_loss += loss.item() * len(targets)
-    #             # total_acc += hits.sum().item()
-    #             total_num += len(targets)
-        
-    #     return total_loss / total_num, 0.0
-
 
     def eval(self, dataloader):
         self.model.eval()
@@ -188,46 +135,11 @@ class Learning_Appr:
     def criterion(self, outputs, targets):
         """Returns the loss value"""
 
-    ## Divergence Loss
-        # criterion = torch.nn.KLDivLoss()
-        # outputs = F.softmax(outputs, dim=1)
-        # targets = torch.nn.functional.one_hot(targets.long(), num_classes=6)
-        # targets = targets.transpose(1,3).squeeze().float()
-
-    ## BCE Loss
-        # criterion = torch.nn.BCELoss()
-        # ouputs = torch.argmax(outputs, dim=1, keepdim=True)
-        # outputs = torch.nn.functional.one_hot(outputs.long(), num_classes=6)
-        # outputs = outputs.transpose(1,3).squeeze().float()
-        # targets = torch.nn.functional.one_hot(targets.long(), num_classes=6)
-        # targets = targets.transpose(1,3).squeeze().float()
-
-    ## MCE Loss
-        # outputs = F.softmax(outputs, dim=1)
-        # targets = torch.nn.functional.one_hot(targets.long(), num_classes=6)
-        # targets = targets.transpose(1,3).squeeze().float()
-        # criterion = torch.nn.functional.mse_loss(outputs,targets)
-
-    # ## Dice Loss
-    #     outputs_1 = F.softmax(outputs, dim=1)
-    #     targets_1 = torch.nn.functional.one_hot(targets.long(), num_classes=4)
-    #     criterion = DiceLoss()
-    #     loss_1 = criterion(outputs_1, targets_1) 
-
     # ## Cross Entropy Loss
-    #     weights = torch.tensor([0.02, 1.0, 1.0, 1.0]).to(self.device)
-    #     targets = targets.squeeze(1).long()
-    #     criterion= torch.nn.CrossEntropyLoss(weight=weights)
-    #     loss_2 = criterion(outputs, targets)
-
-    # ## Combined Loss
-    #     loss = 0.5 * loss_1 + 0.5 * loss_2
-    #     return loss
-    
-    ## Dice Loss
+        weights = torch.tensor([0.04, 1.0, 0.55, 1.0]).to(self.device)
         targets = targets.squeeze(1).long()
-        criterion = CustomSequenceLoss()
-        loss = criterion(outputs, targets) 
+        criterion= torch.nn.CrossEntropyLoss(weight=weights)
+        loss = criterion(outputs, targets)
 
 
         return loss

@@ -3,50 +3,71 @@ from copy import deepcopy
 import torch.nn.functional as F
 import torch
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=9, padding=4):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, padding=padding)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, padding=padding)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+
+        self.shortcut = nn.Sequential()
+        if in_channels != out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv1d(in_channels, out_channels, 1),
+                nn.BatchNorm1d(out_channels)
+            )
+
+    def forward(self, x):
+        residual = self.shortcut(x)
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += residual
+        out = self.relu(out)
+        return out
+
 class UNet(nn.Module):
-    def __init__(self, in_channels=1, num_classes=4, **kwargs):
+    def __init__(self, in_channels=1, num_classes=4):
         super(UNet, self).__init__()
 
         # Encoder
-        self.enc_conv1 = nn.Conv1d(in_channels, 16, 7, padding=3)
-        self.bn1 = nn.BatchNorm1d(16)
-        self.enc_conv2 = nn.Conv1d(16, 32, 5, padding=2)
-        self.bn2 = nn.BatchNorm1d(32)
-        self.enc_conv3 = nn.Conv1d(32, 64, 3, padding=1)
-        self.bn3 = nn.BatchNorm1d(64)
+        self.enc_block1 = ResidualBlock(in_channels, 8)
+        self.enc_block2 = ResidualBlock(8, 16)
+        self.enc_block3 = ResidualBlock(16, 32)
+        self.enc_block4 = ResidualBlock(32, 64)
 
         # Decoder
-        self.dec_conv1 = nn.Conv1d(64, 32, 3, padding=1)
-        self.bn4 = nn.BatchNorm1d(32)
-        self.dec_conv2 = nn.Conv1d(64, 16, 5, padding=2)
-        self.bn5 = nn.BatchNorm1d(16)
-        self.dec_conv3 = nn.Conv1d(32, 16, 7, padding=3)
-        self.bn6 = nn.BatchNorm1d(16)
+        self.dec_block1 = ResidualBlock(64, 32)
+        self.dec_block2 = ResidualBlock(64, 16)  # Adjusted for concatenated channels
+        self.dec_block3 = ResidualBlock(32, 8)  # Adjusted for concatenated channels
+        self.dec_block4 = ResidualBlock(16, 8)  # Adjusted for concatenated channels
 
         # Final output
-        self.final_conv = nn.Conv1d(16, num_classes, 3, padding=1)
+        self.final_conv = nn.Conv1d(8, num_classes, 3, padding=1)
 
         # Dropout
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         # Encoder
-        enc1 = F.relu(self.bn1(self.enc_conv1(x)))
-        enc2 = F.relu(self.bn2(self.enc_conv2(F.max_pool1d(enc1, 2))))
-        enc3 = F.relu(self.bn3(self.enc_conv3(F.max_pool1d(enc2, 2))))
+        enc1 = self.enc_block1(x)
+        enc2 = self.enc_block2(F.max_pool1d(enc1, 2))
+        enc3 = self.enc_block3(F.max_pool1d(enc2, 2))
+        enc4 = self.enc_block4(F.max_pool1d(enc3, 2))
 
         # Decoder
-        dec1 = F.relu(self.bn4(self.dec_conv1(F.interpolate(enc3, scale_factor=2, mode='nearest'))))
-        dec2 = F.relu(self.bn5(self.dec_conv2(F.interpolate(torch.cat([dec1, enc2], 1), scale_factor=2, mode='nearest'))))
-        dec3 = F.relu(self.bn6(self.dec_conv3(torch.cat([dec2, enc1], 1))))
+        dec1 = self.dec_block1(F.interpolate(enc4, scale_factor=2, mode='nearest'))
+        dec2 = self.dec_block2(F.interpolate(torch.cat([dec1, enc3], 1), scale_factor=2, mode='nearest'))
+        dec3 = self.dec_block3(F.interpolate(torch.cat([dec2, enc2], 1), scale_factor=2, mode='nearest'))
+        dec4 = self.dec_block4(torch.cat([dec3, enc1], 1))
 
         # Dropout
-        dec3 = self.dropout(dec3)
+        dec4 = self.dropout(dec4)
 
         # Final output
-        out = self.final_conv(dec3)
+        out = self.final_conv(dec4)
         return out
-
 
 
 
