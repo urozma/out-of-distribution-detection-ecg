@@ -28,11 +28,14 @@ class ResidualBlock(nn.Module):
         return out
 
 class UNet(nn.Module):
-    def __init__(self, in_channels=1, num_classes=4):
+    def __init__(self, data_type):
         super(UNet, self).__init__()
-
+        if data_type == 'real':
+            num_classes = 4
+        elif data_type =='toy' or 'combined':
+            num_classes = 6
         # Encoder
-        self.enc_block1 = ResidualBlock(in_channels, 8)
+        self.enc_block1 = ResidualBlock(1, 8)
         self.enc_block2 = ResidualBlock(8, 16)
         self.enc_block3 = ResidualBlock(16, 32)
         self.enc_block4 = ResidualBlock(32, 64)

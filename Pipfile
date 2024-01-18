@@ -20,6 +20,7 @@ torch = "*"
 torchvision = "*"
 torchaudio = "*"
 matplotlib = "*"
+scikit-learn = "*"
 
 [dev-packages]
 

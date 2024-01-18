@@ -6,7 +6,7 @@ import torch
 class Learning_Appr:
     """Basic class for implementing learning approaches"""
 
-    def __init__(self, model, device, nepochs=100, lr=0.05, lr_min=1e-4, lr_factor=3, lr_patience=5, momentum=0, wd=0):
+    def __init__(self, model, device, data_type, nepochs=100, lr=0.05, lr_min=1e-4, lr_factor=3, lr_patience=5, momentum=0, wd=0):
         self.model = model
         self.device = device
         self.nepochs = nepochs
@@ -19,6 +19,7 @@ class Learning_Appr:
         self.optimizer = None
         self.trn_loss_list = []
         self.val_loss_list = []
+        self.data_type = data_type
 
     @staticmethod
     def extra_parser(args):
@@ -48,7 +49,7 @@ class Learning_Appr:
             train_loss, train_acc, predictions = self.eval(trn_loader)
             self.trn_loss_list.append(train_loss)
             clock2 = time.time()
-            print('| Epoch {:3d}, time={:5.1f}s/{:5.1f}s | Train: loss={:.3f}, met={:5.1f}% |'.format(
+            print('| Epoch {:3d}, time={:5.1f}s/{:5.1f}s | Train: loss={:.3f}, acc={:5.1f}% |'.format(
                 e + 1, clock1 - clock0, clock2 - clock1, train_loss, 100 * train_acc), end='')
 
             # Valid
@@ -56,7 +57,7 @@ class Learning_Appr:
             valid_loss, valid_acc, predictions = self.eval(val_loader)
             self.val_loss_list.append(valid_loss)
             clock4 = time.time()
-            print(' Valid: time={:5.1f}s loss={:.3f}, met={:5.1f}% |'.format(
+            print(' Valid: time={:5.1f}s loss={:.3f}, acc={:5.1f}% |'.format(
                 clock4 - clock3, valid_loss, 100 * valid_acc), end='')
 
             # Adapt learning rate - patience scheme - early stopping regularization
@@ -136,7 +137,10 @@ class Learning_Appr:
         """Returns the loss value"""
 
     # ## Cross Entropy Loss
-        weights = torch.tensor([0.04, 1.0, 0.55, 1.0]).to(self.device)
+        if self.data_type == 'real':
+            weights = torch.tensor([0.04, 1.0, 0.55, 1.0]).to(self.device)
+        elif self.data_type == 'toy' or 'combined':
+            weights = torch.tensor([0.04, 1.0, 1.0, 0.55, 1.0, 1.0]).to(self.device)
         targets = targets.squeeze(1).long()
         criterion= torch.nn.CrossEntropyLoss(weight=weights)
         loss = criterion(outputs, targets)

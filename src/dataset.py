@@ -3,6 +3,12 @@ import pandas as pd
 from torch.utils import data
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
+from ECG_signal_generator import dataset
+import matplotlib.pyplot as plt
+import itertools
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+
 
 
 class MemoryDataset(Dataset):
@@ -29,10 +35,10 @@ class MemoryDataset(Dataset):
         return x, y
 
     
-def get_data():
+def get_data(data_type):
     """Prepare data: dataset splits"""
     # Load the CSV file into a pandas DataFrame
-    df_all = pd.read_csv('ludb_lead_ii_data.csv', header=None)
+    df_all = pd.read_csv('ludb_data.csv', header=None)
     df = df_all.loc[df_all.iloc[:, 3] == 'Sinus rhythm']
 
     # Assuming each signal has 5000 entries
@@ -42,14 +48,34 @@ def get_data():
     num_signals = df.shape[0] // signal_length
 
     # Extract the signal values and target values without column names
-    signals = df.iloc[:num_signals * signal_length, 1].to_numpy().reshape(-1, signal_length)
+    signals_real = df.iloc[:num_signals * signal_length, 1].to_numpy().reshape(-1, signal_length)
     targets = df.iloc[:num_signals * signal_length, 2].to_numpy().reshape(-1, signal_length)
 
-    trn_tuple, val_tuple, tst_tuple = split_dataset(signals, targets)
+    # Get the toy dataset
+    t, signals_toy, targets_toy = dataset(500, True)
 
-    # t, signal_matrix, target_matrix = dataset(1505)
+    signals_real_norm = []
+    signals_toy_norm = []
+    for signal in signals_real:
+        signals_real_norm.append(standarize(signal))
+    for signal in signals_toy:
+        signals_toy_norm.append(standarize(signal))
 
-    # trn_tuple, val_tuple, tst_tuple = split_dataset(signal_matrix, target_matrix, [1000, 500, 5])
+    #signals_real_norm, signals_toy_norm = signals_real, signals_toy
+
+    if data_type == 'real':
+        trn_tuple, val_tuple, tst_tuple = split_dataset(signals_real_norm, targets)
+
+    elif data_type == 'toy':
+        trn_tuple, val_tuple, tst_tuple = split_dataset(signals_toy_norm, targets_toy)
+
+    elif data_type == 'combined':
+        trn_tuple, val_tuple, _ = split_dataset(signals_toy_norm, targets_toy)
+        _, _, tst_tuple = split_dataset(signals_real_norm, targets)
+
+    plot_signal_histogram(signals_real_norm, title="Real data")
+    plot_signal_histogram(signals_toy_norm[len(signals_real_norm):], title="Toy data")
+
     # initialize data structure
     all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
                 'val': {'x': val_tuple[0], 'y': val_tuple[1]},
@@ -57,14 +83,14 @@ def get_data():
 
     return all_data
 
-def get_loaders(batch_sz, num_work, pin_mem):
+def get_loaders(batch_sz, num_work, pin_mem, data_type):
     """Apply transformations to Dataset and create the DataLoaders for each task"""
 
     # transformations
     trn_transform, tst_transform = get_transforms()
 
     # dataset
-    all_data = get_data()
+    all_data = get_data(data_type)
     trn_dset = MemoryDataset(all_data['trn'], trn_transform)
     val_dset = MemoryDataset(all_data['val'], tst_transform)
     tst_dset = MemoryDataset(all_data['tst'], tst_transform)
@@ -115,3 +141,56 @@ def split_dataset(dataset, target):
 
     return train_tuple, val_tuple, test_tuple
 
+def plot_signal_histogram(signals, title="Signal Histogram"):
+    # Flatten the list of signals
+    flattened_signals = list(itertools.chain(*signals))
+
+    # Count the total number of signal values
+    total_signals = len(flattened_signals)
+
+    # Create histogram with specified range (-1 to 1) and get the counts
+    counts, bins = np.histogram(flattened_signals, bins=40, range=(-1, 1))
+
+    # Calculate the percentages
+    percentages = (counts / total_signals) * 100
+
+    # Plotting the histogram
+    plt.bar(bins[:-1], percentages, width=np.diff(bins), align="edge")
+
+    # Setting the x-axis limits
+    plt.xlim(-1, 1)
+
+    # Adding titles and labels
+    plt.title(title)
+    plt.xlabel("Signal value")
+    plt.ylabel("Percentage")
+
+    # Show plot
+    plt.show()
+
+def normalize(signal, min_val=-1, max_val=1):
+    # Normalize signal to range [-1, 1]
+    signal_min = np.min(signal)
+    signal_max = np.max(signal)
+    normalized_signal = (signal - signal_min) / (signal_max - signal_min)
+
+    # Scale to desired range [min_val, max_val]
+    scaled_signal = normalized_signal * (max_val - min_val) + min_val
+
+    return scaled_signal
+
+def standardize_datasets(toy_dataset, real_dataset):
+    scaler = StandardScaler()
+
+    # Fit the scaler on the toy dataset and transform both datasets
+    scaler.fit(toy_dataset)
+    toy_dataset_standardized = scaler.transform(toy_dataset)
+    real_dataset_standardized = scaler.transform(real_dataset)
+
+    return toy_dataset_standardized, real_dataset_standardized
+
+def standarize(signal):
+    mean = np.mean(signal)
+    std = np.std(signal)
+    standardized_data = (signal - mean) / std
+    return standardized_data
