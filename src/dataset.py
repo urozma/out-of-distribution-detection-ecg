@@ -35,7 +35,7 @@ class MemoryDataset(Dataset):
         return x, y
 
     
-def get_data(data_type):
+def get_data(data_type, real_data_amount):
     """Prepare data: dataset splits"""
     # Load the CSV file into a pandas DataFrame
     df_all = pd.read_csv('ludb_data.csv', header=None)
@@ -50,6 +50,12 @@ def get_data(data_type):
     # Extract the signal values and target values without column names
     signals_real = df.iloc[:num_signals * signal_length, 1].to_numpy().reshape(-1, signal_length)
     targets = df.iloc[:num_signals * signal_length, 2].to_numpy().reshape(-1, signal_length)
+
+    # SHorten real data to desired length
+    signals_real = signals_real[:real_data_amount]
+    targets = targets[:real_data_amount]
+    print(len(targets))
+
 
     # Get the toy dataset
     t, signals_toy, targets_toy = dataset(500, True)
@@ -83,14 +89,14 @@ def get_data(data_type):
 
     return all_data
 
-def get_loaders(batch_sz, num_work, pin_mem, data_type):
+def get_loaders(batch_sz, num_work, pin_mem, data_type, real_data_amount):
     """Apply transformations to Dataset and create the DataLoaders for each task"""
 
     # transformations
     trn_transform, tst_transform = get_transforms()
 
     # dataset
-    all_data = get_data(data_type)
+    all_data = get_data(data_type, real_data_amount)
     trn_dset = MemoryDataset(all_data['trn'], trn_transform)
     val_dset = MemoryDataset(all_data['val'], tst_transform)
     tst_dset = MemoryDataset(all_data['tst'], tst_transform)
@@ -158,7 +164,8 @@ def plot_signal_histogram(signals, title="Signal Histogram"):
     plt.bar(bins[:-1], percentages, width=np.diff(bins), align="edge")
 
     # Setting the x-axis limits
-    plt.xlim(-1, 1)
+    plt.xlim(-2, 5)
+    plt.ylim(0, 10)
 
     # Adding titles and labels
     plt.title(title)

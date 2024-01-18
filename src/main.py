@@ -28,7 +28,7 @@ def main(argv=None):
     # dataset args
     parser.add_argument('--data-type', default='combined', type=str, required=False,
                         help='Real or toy data (default=%(default)s)')
-    parser.add_argument('--three-targets', default=True, type=str, required=False,
+    parser.add_argument('--real-data-amount', default=40, type=int, required=False,
                         help='Real or toy data (default=%(default)s)')
     parser.add_argument('--retrain-toy', default=False, type=bool, required=False,
                         help='Should the toy data model be retrained (default=%(default)s)')
@@ -106,13 +106,15 @@ def main(argv=None):
     trn_loader, val_loader, tst_loader = get_loaders(batch_sz=5,
                                                      num_work=args.num_workers,
                                                      pin_mem=args.pin_memory,
-                                                     data_type=args.data_type)
+                                                     data_type=args.data_type,
+                                                     real_data_amount=args.real_data_amount)
 
     # Get refining loaders
     trn_loader_2, val_loader_2, tst_loader_2 = get_loaders(batch_sz=args.batch_size,
                                                      num_work=args.num_workers,
                                                      pin_mem=args.pin_memory,
-                                                     data_type="real")
+                                                     data_type="real",
+                                                     real_data_amount=args.real_data_amount)
 
 
     # If starting from scratch, train the model
