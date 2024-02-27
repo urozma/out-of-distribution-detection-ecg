@@ -31,8 +31,8 @@ class UNet(nn.Module):
     def __init__(self, data_type):
         super(UNet, self).__init__()
         if data_type == 'real':
-            num_classes = 4
-        elif data_type =='toy' or 'combined':
+            num_classes = 6
+        elif data_type =='toy':
             num_classes = 6
         # Encoder
         self.enc_block1 = ResidualBlock(1, 8)

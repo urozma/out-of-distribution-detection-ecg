@@ -54,11 +54,10 @@ def get_data(data_type, real_data_amount):
     # SHorten real data to desired length
     signals_real = signals_real[:real_data_amount]
     targets = targets[:real_data_amount]
-    print(len(targets))
 
 
     # Get the toy dataset
-    t, signals_toy, targets_toy = dataset(500, True)
+    t, signals_toy, targets_toy = dataset(500, False)
 
     signals_real_norm = []
     signals_toy_norm = []
@@ -75,9 +74,9 @@ def get_data(data_type, real_data_amount):
     elif data_type == 'toy':
         trn_tuple, val_tuple, tst_tuple = split_dataset(signals_toy_norm, targets_toy)
 
-    elif data_type == 'combined':
-        trn_tuple, val_tuple, _ = split_dataset(signals_toy_norm, targets_toy)
-        _, _, tst_tuple = split_dataset(signals_real_norm, targets)
+    # elif data_type == 'combined':
+    #     trn_tuple, val_tuple, _ = split_dataset(signals_toy_norm, targets_toy)
+    #     _, _, tst_tuple = split_dataset(signals_real_norm, targets)
 
     plot_signal_histogram(signals_real_norm, title="Real data")
     plot_signal_histogram(signals_toy_norm[len(signals_real_norm):], title="Toy data")
@@ -155,7 +154,7 @@ def plot_signal_histogram(signals, title="Signal Histogram"):
     total_signals = len(flattened_signals)
 
     # Create histogram with specified range (-1 to 1) and get the counts
-    counts, bins = np.histogram(flattened_signals, bins=40, range=(-1, 1))
+    counts, bins = np.histogram(flattened_signals, bins=40)
 
     # Calculate the percentages
     percentages = (counts / total_signals) * 100
@@ -164,8 +163,8 @@ def plot_signal_histogram(signals, title="Signal Histogram"):
     plt.bar(bins[:-1], percentages, width=np.diff(bins), align="edge")
 
     # Setting the x-axis limits
-    plt.xlim(-2, 5)
-    plt.ylim(0, 10)
+    plt.xlim(-6, 6)
+    plt.ylim(0, 50)
 
     # Adding titles and labels
     plt.title(title)

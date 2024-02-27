@@ -137,10 +137,10 @@ class Learning_Appr:
         """Returns the loss value"""
 
     # ## Cross Entropy Loss
-        if self.data_type == 'real':
-            weights = torch.tensor([0.04, 1.0, 0.55, 1.0]).to(self.device)
-        elif self.data_type == 'toy' or 'combined':
-            weights = torch.tensor([0.04, 1.0, 1.0, 0.55, 1.0, 1.0]).to(self.device)
+        #if self.data_type == 'real' or 'toy':
+        #weights = torch.tensor([0.04, 1.0, 0.55, 1.0]).to(self.device)
+        # elif self.data_type == 'toy' or 'combined':
+        weights = torch.tensor([0.04, 1.0, 1.0, 0.55, 1.0, 1.0]).to(self.device)
         targets = targets.squeeze(1).long()
         criterion= torch.nn.CrossEntropyLoss(weight=weights)
         loss = criterion(outputs, targets)
