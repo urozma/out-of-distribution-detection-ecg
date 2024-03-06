@@ -72,8 +72,14 @@ class UNet(nn.Module):
         out = self.final_conv(dec4)
         return out
 
+    def extract_latent_space(self, x):
+        # Encoder
+        enc1 = self.enc_block1(x)
+        enc2 = self.enc_block2(F.max_pool1d(enc1, 2))
+        enc3 = self.enc_block3(F.max_pool1d(enc2, 2))
+        enc4 = self.enc_block4(F.max_pool1d(enc3, 2))
 
-
+        return enc4
     def get_copy(self):
         """Get weights from the model"""
         return deepcopy(self.state_dict())

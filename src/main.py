@@ -8,6 +8,8 @@ import utils
 import network
 import learning_approach
 from dataset import get_loaders
+from add_qs import add_qs_peaks
+from scipy.stats import mannwhitneyu, ttest_ind
 
 
 def main(argv=None):
@@ -26,14 +28,16 @@ def main(argv=None):
                         help='Random seed (default=%(default)s)')
 
     # dataset args
+    parser.add_argument('--scenario', default="ood", type=str, required=False,
+                        help='Scenario (default=%(default)s)')
     parser.add_argument('--transfer', default=True, type=bool, required=False,
                         help='Scenario (default=%(default)s)')
-    parser.add_argument('--real-data-amount', default=136, type=int, required=False,
-                        help='Real or toy data (default=%(default)s)')
     parser.add_argument('--retrain-toy', default=False, type=bool, required=False,
                         help='Should the toy data model be retrained (default=%(default)s)')
     parser.add_argument('--retrain-real', default=False, type=bool, required=False,
                         help='Should the toy data model be refined again (default=%(default)s)')
+    parser.add_argument('--real-data-amount', default=136, type=int, required=False,
+                        help='Real or toy data (default=%(default)s)')
     parser.add_argument('--num-workers', default=4, type=int, required=False,
                         help='Number of subprocesses to use for dataloader (default=%(default)s)')
     parser.add_argument('--pin-memory', default=False, type=bool, required=False,
@@ -103,12 +107,12 @@ def main(argv=None):
     utils.seed_everything(seed=args.seed)
     appr_kwargs = {**base_kwargs, **dict(**appr_args.__dict__)}
     appr = learning_approach.Learning_Appr(net, device, data_type, **appr_kwargs)
-    print('Approach arguments =')
+    if len(np.sort(list(vars(appr_args).keys()))) > 0:
+        print('Approach arguments =')
     for arg in np.sort(list(vars(appr_args).keys())):
         print('\t' + arg + ':', getattr(appr_args, arg))
-    print('=' * 108)
-
     assert len(extra_args) == 0, "Unused args: {}".format(' '.join(extra_args))
+    print('=' * 108)
 
     # Loaders
     utils.seed_everything(seed=args.seed)
@@ -116,15 +120,24 @@ def main(argv=None):
                                                      num_work=args.num_workers,
                                                      pin_mem=args.pin_memory,
                                                      data_type=data_type,
-                                                     real_data_amount=args.real_data_amount)
+                                                     real_data_amount=args.real_data_amount,
+                                                     health="Sinus rhythm")
 
     # Get refining loaders
     trn_loader_2, val_loader_2, tst_loader_2 = get_loaders(batch_sz=args.batch_size,
                                                      num_work=args.num_workers,
                                                      pin_mem=args.pin_memory,
                                                      data_type="real",
-                                                     real_data_amount=args.real_data_amount)
+                                                     real_data_amount=args.real_data_amount,
+                                                     health="Sinus rhythm")
 
+    # Get unhealthy data loaders
+    ood_trn_loader,_,ood_tst_loader = get_loaders(batch_sz=args.batch_size,
+                                                     num_work=args.num_workers,
+                                                     pin_mem=args.pin_memory,
+                                                     data_type="real",
+                                                     real_data_amount=args.real_data_amount,
+                                                     health="Sinus tachycardia")
 
     # If starting from scratch, train the model
     if args.retrain_toy is True or not os.path.exists(model_path):
@@ -164,48 +177,11 @@ def main(argv=None):
             torch.save(net.state_dict(), refined_model_path)
             print('Model saved to {}'.format(model_path))
             print('-' * 108)
+    print('=' * 108)
 
     # Test
-    test_loss, test_acc, predictions_list = appr.eval(tst_loader_2)
-
-    def add_qs_peaks(signals, targets):
-        targets = targets[0].squeeze().tolist()
-        updated_targets = []
-        for signal_tuple, target in zip(signals, targets):
-            signal = signal_tuple[0][0].tolist()
-            new_target = target
-            i = 0
-            while i < len(target) - 1:
-                # Find P peak (1) followed by any R peak (3), ignoring subsequent adjacent R peaks
-                if target[i] == 1:
-                    for j in range(i + 1, len(target)):
-                        if target[j] == 3:
-                            if j - i > 1:  # Ensure there's at least one point between P and R
-                                q_values = signal[i+1:j]
-                                if len(q_values) > 0:  # Ensure segment is not empty
-                                    q_index = i + 1 + np.argmin(q_values).item()
-                                    if target[q_index] == 0:  # Ensure Q peak isn't already marked
-                                        new_target[q_index] = 2
-
-                # Find R peak (3) followed by any T peak (5), ignoring subsequent adjacent T peaks
-                if target[i] == 3:
-                    for k in range(i + 1, len(target)):
-                        if target[k] == 5:
-                            if k - i > 1:  # Ensure there's at least one point between R and T
-                                s_values = signal[i + 1:k]  # Extract the segment between R and T
-                                if len(s_values) > 0:  # Ensure segment is not empty
-                                    s_index = i + 1 + np.argmin(s_values).item()
-                                    if target[s_index] == 0 or 2:
-                                        new_target[s_index] = 4
-                            break  # Stop after the first T peak is processed
-
-                i += 1
-
-            updated_targets.append(new_target)
-
-        targets_tensor = [torch.tensor(updated_targets).unsqueeze(1)]
-        return targets_tensor
-
+    test_loss, test_acc, predictions_list, latent_healthy = appr.eval_ltnt(tst_loader_2)
+    uh_test_loss, uh_test_acc, uh_predictions_list, latent_unhealthy = appr.eval_ltnt(ood_tst_loader)
     # After obtaining predictions_list from your eval function
     a_predictions_list = add_qs_peaks(tst_loader_2.dataset, predictions_list)
 
@@ -215,13 +191,34 @@ def main(argv=None):
     print('Save at ' + os.path.join(args.results_path, args.exp_name))
     print('[Elapsed time = {:.1f} h]'.format((time.time() - tstart) / (60 * 60)))
     print('Done!')
+    print('=' * 108)
+
+    if args.scenario == "ood":
+        # Flatten the latent space arrays if they are multi-dimensional
+        latent_healthy_flat = np.concatenate([x.flatten() for x in latent_healthy])
+        latent_unhealthy_flat = np.concatenate([x.flatten() for x in latent_unhealthy])
+
+        # Perform the Mann-Whitney U Test
+        stat, p_value = mannwhitneyu(latent_healthy_flat, latent_unhealthy_flat)
+
+        print("Mann-Whitney U Test")
+        print("Statistic:", stat)
+        print("P-value:", p_value)
+
+        # Interpret the p-value
+        alpha = 0.05  # significance level
+        if p_value > alpha:
+            print("No significant difference between the distributions")
+        else:
+            print("Significant difference between the distributions")
+
 
     indices = np.array(range(3000))
 
     plt.figure(1)
     for i, sample in enumerate(tst_loader_2.dataset):
         signal = np.transpose(sample[0])
-        
+
         true_p = np.where(np.transpose(sample[1]) == 1)[0]
         true_q = np.where(np.transpose(sample[1]) == 2)[0]
         true_r = np.where(np.transpose(sample[1]) == 3)[0]
@@ -269,29 +266,6 @@ def main(argv=None):
     plt.plot(range(len(appr.val_loss_list)), appr.val_loss_list, label='Validation loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.legend()
-    plt.show()
-
-    plt.figure(4)
-    for i, sample in enumerate(tst_loader_2.dataset):
-        signal = np.transpose(sample[0])
-
-        predicted_p = np.where(np.transpose(predictions_list[0][i] == 1))[0]
-        predicted_q = np.where(np.transpose(predictions_list[0][i] == 2))[0]
-        predicted_r = np.where(np.transpose(predictions_list[0][i] == 3))[0]
-        predicted_s = np.where(np.transpose(predictions_list[0][i] == 4))[0]
-        predicted_t = np.where(np.transpose(predictions_list[0][i] == 5))[0]
-
-        plt.subplot(len(tst_loader_2.dataset), 1, i + 1)
-        plt.plot(indices, signal)
-        plt.scatter(indices[predicted_p], signal[predicted_p], marker='D', s=20, color='red', label='P-wave')
-        plt.scatter(indices[predicted_q], signal[predicted_q], marker='D', s=20, color='blue', label='Q-wave')
-        plt.scatter(indices[predicted_r], signal[predicted_r], marker='D', s=20, color='green', label='R-wave')
-        plt.scatter(indices[predicted_s], signal[predicted_s], marker='D', s=20, color='orange', label='S-wave')
-        plt.scatter(indices[predicted_t], signal[predicted_t], marker='D', s=20, color='pink', label='T-wave')
-
-
-    plt.suptitle('Test signals with marked predicted peaks real')
     plt.legend()
     plt.show()
 

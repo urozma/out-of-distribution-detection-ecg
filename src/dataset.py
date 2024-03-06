@@ -35,11 +35,15 @@ class MemoryDataset(Dataset):
         return x, y
 
     
-def get_data(data_type, real_data_amount):
+def get_data(data_type, real_data_amount, health):
     """Prepare data: dataset splits"""
     # Load the CSV file into a pandas DataFrame
     df_all = pd.read_csv('ludb_data.csv', header=None)
-    df = df_all.loc[df_all.iloc[:, 3] == 'Sinus rhythm']
+    # if health == "healthy":
+    #     df = df_all.loc[df_all.iloc[:, 3] == 'Sinus rhythm']
+    # else:
+    #     df = df_all.loc[df_all.iloc[:, 3] != 'Sinus rhythm']
+    df = df_all.loc[df_all.iloc[:, 3] == health]
 
     # Assuming each signal has 5000 entries
     signal_length = 3000
@@ -74,12 +78,8 @@ def get_data(data_type, real_data_amount):
     elif data_type == 'toy':
         trn_tuple, val_tuple, tst_tuple = split_dataset(signals_toy_norm, targets_toy)
 
-    # elif data_type == 'combined':
-    #     trn_tuple, val_tuple, _ = split_dataset(signals_toy_norm, targets_toy)
-    #     _, _, tst_tuple = split_dataset(signals_real_norm, targets)
-
-    plot_signal_histogram(signals_real_norm, title="Real data")
-    plot_signal_histogram(signals_toy_norm[len(signals_real_norm):], title="Toy data")
+    #plot_signal_histogram(signals_real_norm, title="Real data")
+    #plot_signal_histogram(signals_toy_norm[len(signals_real_norm):], title="Toy data")
 
     # initialize data structure
     all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
@@ -88,14 +88,14 @@ def get_data(data_type, real_data_amount):
 
     return all_data
 
-def get_loaders(batch_sz, num_work, pin_mem, data_type, real_data_amount):
+def get_loaders(batch_sz, num_work, pin_mem, data_type, real_data_amount, health):
     """Apply transformations to Dataset and create the DataLoaders for each task"""
 
     # transformations
     trn_transform, tst_transform = get_transforms()
 
     # dataset
-    all_data = get_data(data_type, real_data_amount)
+    all_data = get_data(data_type, real_data_amount, health)
     trn_dset = MemoryDataset(all_data['trn'], trn_transform)
     val_dset = MemoryDataset(all_data['val'], tst_transform)
     tst_dset = MemoryDataset(all_data['tst'], tst_transform)

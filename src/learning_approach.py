@@ -132,6 +132,41 @@ class Learning_Appr:
 
         return average_loss, accuracy, predictions_list
 
+    def eval_ltnt(self, dataloader):
+        self.model.eval()
+        total_loss, correct_predictions, total_predictions = 0.0, 0, 0
+        predictions_list = []
+        latent_spaces = []  # To store the latent spaces for each batch
+
+        with torch.no_grad():
+            for inputs, targets in dataloader:
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+
+                # Extract both outputs and latent spaces
+                outputs = self.model(inputs)
+                latent_space = self.model.extract_latent_space(inputs)
+                latent_spaces.append(latent_space)
+
+                loss = self.criterion(outputs, targets)
+                total_loss += loss.item()
+
+                predicted_classes = torch.argmax(outputs, dim=1, keepdim=True)
+                predictions_list.append(predicted_classes)
+
+                # Exclude samples with target value 0
+                mask = targets != 0
+
+                correct_predictions += (predicted_classes[mask] == targets[mask]).sum().item()
+                total_predictions += mask.sum().item()
+
+        average_loss = total_loss / len(dataloader)
+        accuracy = correct_predictions / total_predictions if total_predictions != 0 else 0
+
+        # Now, latent_spaces contains the extracted features for each batch
+        # You might want to process these further depending on your use case
+
+        return average_loss, accuracy, predictions_list, latent_spaces
+
 
     def criterion(self, outputs, targets):
         """Returns the loss value"""
