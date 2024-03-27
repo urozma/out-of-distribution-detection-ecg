@@ -42,9 +42,9 @@ class UNet(nn.Module):
 
         # Decoder
         self.dec_block1 = ResidualBlock(64, 32)
-        self.dec_block2 = ResidualBlock(64, 16)  # Adjusted for concatenated channels
-        self.dec_block3 = ResidualBlock(32, 8)  # Adjusted for concatenated channels
-        self.dec_block4 = ResidualBlock(16, 8)  # Adjusted for concatenated channels
+        self.dec_block2 = ResidualBlock(64, 16)
+        self.dec_block3 = ResidualBlock(32, 8)
+        self.dec_block4 = ResidualBlock(16, 8)
 
         # Final output
         self.final_conv = nn.Conv1d(8, num_classes, 3, padding=1)
@@ -87,6 +87,7 @@ class UNet(nn.Module):
     def set_state_dict(self, state_dict):
         """Load weights into the model"""
         self.load_state_dict(deepcopy(state_dict))
+
 
 
 def simplenet(**kwargs):

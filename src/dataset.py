@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import itertools
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from add_qs import add_qs_peaks_modified
 
 
 
@@ -38,11 +39,8 @@ class MemoryDataset(Dataset):
 def get_data(data_type, real_data_amount, health):
     """Prepare data: dataset splits"""
     # Load the CSV file into a pandas DataFrame
-    df_all = pd.read_csv('ludb_data.csv', header=None)
-    # if health == "healthy":
-    #     df = df_all.loc[df_all.iloc[:, 3] == 'Sinus rhythm']
-    # else:
-    #     df = df_all.loc[df_all.iloc[:, 3] != 'Sinus rhythm']
+    df_all = pd.read_csv('ludb_data_w_fibrillation.csv', header=None)
+
     df = df_all.loc[df_all.iloc[:, 3] == health]
 
     # Assuming each signal has 5000 entries
@@ -58,6 +56,9 @@ def get_data(data_type, real_data_amount, health):
     # SHorten real data to desired length
     signals_real = signals_real[:real_data_amount]
     targets = targets[:real_data_amount]
+
+    # Add QR
+    targets = add_qs_peaks_modified(signals_real, targets)
 
 
     # Get the toy dataset
@@ -126,23 +127,35 @@ def get_transforms():
 # Split dataset into pairs of training, validation and test data with their target values
 def split_dataset(dataset, target):
 
-    tst_nr = 5
+    tst_nr = 15
     trn_nr = round(0.7*len(dataset))
     val_nr = len(dataset)-tst_nr-trn_nr
 
-    split = [trn_nr,val_nr,tst_nr]
+    split = [tst_nr,val_nr,trn_nr]
 
-    train_data = dataset[:split[0]]
-    train_target = target[:split[0]]
-    train_tuple = (train_data, train_target)
+    # train_data = dataset[:split[0]]
+    # train_target = target[:split[0]]
+    # train_tuple = (train_data, train_target)
+    #
+    # val_data = dataset[split[0]:split[0] + split[1]]
+    # val_target = target[split[0]:split[0] + split[1]]
+    # val_tuple = (val_data, val_target)
+    #
+    # test_data = dataset[split[0] + split[1]:split[0] + split[1] + split[2]]
+    # test_target = target[split[0] + split[1]:split[0] + split[1] + split[2]]
+    # test_tuple = (test_data, test_target)
+
+    test_data = dataset[:split[0]]
+    test_target = target[:split[0]]
+    test_tuple = (test_data, test_target)
 
     val_data = dataset[split[0]:split[0] + split[1]]
     val_target = target[split[0]:split[0] + split[1]]
     val_tuple = (val_data, val_target)
 
-    test_data = dataset[split[0] + split[1]:split[0] + split[1] + split[2]]
-    test_target = target[split[0] + split[1]:split[0] + split[1] + split[2]]
-    test_tuple = (test_data, test_target)
+    train_data = dataset[split[0] + split[1]:split[0] + split[1] + split[2]]
+    train_target = target[split[0] + split[1]:split[0] + split[1] + split[2]]
+    train_tuple = (train_data, train_target)
 
     return train_tuple, val_tuple, test_tuple
 

@@ -92,9 +92,12 @@ class Learning_Appr:
             # Forward current model
             outputs = self.model(signals.to(self.device))
             loss = self.criterion(outputs, targets.to(self.device))
+            l1_loss = sum(p.abs().sum() for p in self.model.parameters())
+            total_loss = loss + 0 * l1_loss
+
             # Backward
             self.optimizer.zero_grad()
-            loss.backward()
+            total_loss.backward()
             self.optimizer.step()
 
 
@@ -171,11 +174,7 @@ class Learning_Appr:
     def criterion(self, outputs, targets):
         """Returns the loss value"""
 
-    # ## Cross Entropy Loss
-        #if self.data_type == 'real' or 'toy':
-        #weights = torch.tensor([0.04, 1.0, 0.55, 1.0]).to(self.device)
-        # elif self.data_type == 'toy' or 'combined':
-        weights = torch.tensor([0.04, 1.0, 1.0, 0.55, 1.0, 1.0]).to(self.device)
+        weights = torch.tensor([0.04, 1.0, 1.0, 0.4, 1.0, 1.0]).to(self.device)
         targets = targets.squeeze(1).long()
         criterion= torch.nn.CrossEntropyLoss(weight=weights)
         loss = criterion(outputs, targets)
