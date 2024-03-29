@@ -9,6 +9,7 @@ import itertools
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from add_qs import add_qs_peaks_modified
+from sklearn.utils import shuffle
 
 
 
@@ -36,67 +37,58 @@ class MemoryDataset(Dataset):
         return x, y
 
     
-def get_data(data_type, real_data_amount, health):
+def get_data(data_type, real_data_amount, health, add_qs):
     """Prepare data: dataset splits"""
     # Load the CSV file into a pandas DataFrame
-    df_all = pd.read_csv('ludb_data_w_fibrillation.csv', header=None)
-
-    df = df_all.loc[df_all.iloc[:, 3] == health]
-
-    # Assuming each signal has 5000 entries
-    signal_length = 3000
-
-    # Calculate the number of signals
-    num_signals = df.shape[0] // signal_length
-
-    # Extract the signal values and target values without column names
-    signals_real = df.iloc[:num_signals * signal_length, 1].to_numpy().reshape(-1, signal_length)
-    targets = df.iloc[:num_signals * signal_length, 2].to_numpy().reshape(-1, signal_length)
-
-    # SHorten real data to desired length
-    signals_real = signals_real[:real_data_amount]
-    targets = targets[:real_data_amount]
-
-    # Add QR
-    targets = add_qs_peaks_modified(signals_real, targets)
-
-
-    # Get the toy dataset
-    t, signals_toy, targets_toy = dataset(500, False)
-
-    signals_real_norm = []
-    signals_toy_norm = []
-    for signal in signals_real:
-        signals_real_norm.append(standarize(signal))
-    for signal in signals_toy:
-        signals_toy_norm.append(standarize(signal))
-
-    #signals_real_norm, signals_toy_norm = signals_real, signals_toy
 
     if data_type == 'real':
-        trn_tuple, val_tuple, tst_tuple = split_dataset(signals_real_norm, targets)
+        df_all = pd.read_csv('ludb_data.csv', header=None)
+
+        df = df_all.loc[df_all.iloc[:, 3] == health]
+
+        # Assuming each signal has 5000 entries
+        signal_length = 3000
+
+        # Calculate the number of signals
+        num_signals = df.shape[0] // signal_length
+
+        # Extract the signal values and target values without column names
+        signals = df.iloc[:num_signals * signal_length, 1].to_numpy().reshape(-1, signal_length)
+        targets = df.iloc[:num_signals * signal_length, 2].to_numpy().reshape(-1, signal_length)
+
+        # SHorten real data to desired length
+        signals = signals[:real_data_amount]
+        targets = targets[:real_data_amount]
+
+        if add_qs is True:
+            # Add QR
+            targets = add_qs_peaks_modified(signals, targets)
+
 
     elif data_type == 'toy':
-        trn_tuple, val_tuple, tst_tuple = split_dataset(signals_toy_norm, targets_toy)
+        # Get the toy dataset
+        t, signals, targets = dataset(500, False)
 
-    #plot_signal_histogram(signals_real_norm, title="Real data")
-    #plot_signal_histogram(signals_toy_norm[len(signals_real_norm):], title="Toy data")
+    signals_norm = []
+    for signal in signals:
+        signals_norm.append(standarize(signal))
+    trn_tuple, val_tuple, tst_tuple = split_dataset(signals_norm, targets)
 
-    # initialize data structure
+    # Initialize data structure
     all_data = {'trn': {'x': trn_tuple[0], 'y': trn_tuple[1]},
                 'val': {'x': val_tuple[0], 'y': val_tuple[1]},
                 'tst': {'x': tst_tuple[0], 'y': tst_tuple[1]}}
 
     return all_data
 
-def get_loaders(batch_sz, num_work, pin_mem, data_type, real_data_amount, health):
+def get_loaders(batch_sz, num_work, pin_mem, data_type, real_data_amount=136, health='Sinus rhythm', add_qs=False):
     """Apply transformations to Dataset and create the DataLoaders for each task"""
 
     # transformations
     trn_transform, tst_transform = get_transforms()
 
     # dataset
-    all_data = get_data(data_type, real_data_amount, health)
+    all_data= get_data(data_type, real_data_amount, health, add_qs)
     trn_dset = MemoryDataset(all_data['trn'], trn_transform)
     val_dset = MemoryDataset(all_data['val'], tst_transform)
     tst_dset = MemoryDataset(all_data['tst'], tst_transform)
@@ -126,8 +118,10 @@ def get_transforms():
 
 # Split dataset into pairs of training, validation and test data with their target values
 def split_dataset(dataset, target):
+    np.random.seed(None)
+    dataset, target = shuffle(dataset, target)
 
-    tst_nr = 15
+    tst_nr = 14
     trn_nr = round(0.7*len(dataset))
     val_nr = len(dataset)-tst_nr-trn_nr
 
@@ -159,34 +153,6 @@ def split_dataset(dataset, target):
 
     return train_tuple, val_tuple, test_tuple
 
-def plot_signal_histogram(signals, title="Signal Histogram"):
-    # Flatten the list of signals
-    flattened_signals = list(itertools.chain(*signals))
-
-    # Count the total number of signal values
-    total_signals = len(flattened_signals)
-
-    # Create histogram with specified range (-1 to 1) and get the counts
-    counts, bins = np.histogram(flattened_signals, bins=40)
-
-    # Calculate the percentages
-    percentages = (counts / total_signals) * 100
-
-    # Plotting the histogram
-    plt.bar(bins[:-1], percentages, width=np.diff(bins), align="edge")
-
-    # Setting the x-axis limits
-    plt.xlim(-6, 6)
-    plt.ylim(0, 50)
-
-    # Adding titles and labels
-    plt.title(title)
-    plt.xlabel("Signal value")
-    plt.ylabel("Percentage")
-
-    # Show plot
-    plt.show()
-
 def normalize(signal, min_val=-1, max_val=1):
     # Normalize signal to range [-1, 1]
     signal_min = np.min(signal)
@@ -198,18 +164,12 @@ def normalize(signal, min_val=-1, max_val=1):
 
     return scaled_signal
 
-def standardize_datasets(toy_dataset, real_dataset):
-    scaler = StandardScaler()
-
-    # Fit the scaler on the toy dataset and transform both datasets
-    scaler.fit(toy_dataset)
-    toy_dataset_standardized = scaler.transform(toy_dataset)
-    real_dataset_standardized = scaler.transform(real_dataset)
-
-    return toy_dataset_standardized, real_dataset_standardized
-
 def standarize(signal):
     mean = np.mean(signal)
     std = np.std(signal)
     standardized_data = (signal - mean) / std
     return standardized_data
+
+def reverse_standarize(standardized_data, mean, std):
+    original_data = standardized_data * std + mean
+    return original_data

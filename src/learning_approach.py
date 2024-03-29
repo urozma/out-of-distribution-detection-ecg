@@ -2,6 +2,7 @@ import time
 import numpy as np
 from argparse import ArgumentParser
 import torch
+from sklearn.metrics import f1_score
 
 class Learning_Appr:
     """Basic class for implementing learning approaches"""
@@ -46,7 +47,7 @@ class Learning_Appr:
             clock0 = time.time()
             self.train_epoch(trn_loader)
             clock1 = time.time()
-            train_loss, train_acc, predictions = self.eval(trn_loader)
+            train_loss, train_acc, predictions, _ = self.eval(trn_loader)
             self.trn_loss_list.append(train_loss)
             clock2 = time.time()
             print('| Epoch {:3d}, time={:5.1f}s/{:5.1f}s | Train: loss={:.3f}, acc={:5.1f}% |'.format(
@@ -54,7 +55,7 @@ class Learning_Appr:
 
             # Valid
             clock3 = time.time()
-            valid_loss, valid_acc, predictions = self.eval(val_loader)
+            valid_loss, valid_acc, predictions, _ = self.eval(val_loader)
             self.val_loss_list.append(valid_loss)
             clock4 = time.time()
             print(' Valid: time={:5.1f}s loss={:.3f}, acc={:5.1f}% |'.format(
@@ -104,49 +105,15 @@ class Learning_Appr:
     def eval(self, dataloader):
         self.model.eval()
         total_loss, correct_predictions, total_predictions = 0.0, 0, 0
-        predictions_list = []
+        predictions_list, true_labels, latent_spaces = [], [], []
+
         with torch.no_grad():
             for inputs, targets in dataloader:
 
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
 
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets)
-                total_loss += loss.item()
 
-                predicted_classes = torch.argmax(outputs, dim=1, keepdim=True)
-                predictions_list.append(predicted_classes)
-
-                # Exclude samples with target value 0
-                mask = targets != 0
-
-                correct_predictions += (predicted_classes[mask] == targets[mask]).sum().item()
-                total_predictions += mask.sum().item()
-
-
-                #correct_predictions += (predicted_classes == targets).sum().item()
-                #total_predictions += targets.numel()
-            
-
-        average_loss = total_loss / len(dataloader)
-        #accuracy = correct_predictions / total_predictions
-
-        accuracy = correct_predictions / total_predictions if total_predictions != 0 else 0
-
-        return average_loss, accuracy, predictions_list
-
-    def eval_ltnt(self, dataloader):
-        self.model.eval()
-        total_loss, correct_predictions, total_predictions = 0.0, 0, 0
-        predictions_list = []
-        latent_spaces = []  # To store the latent spaces for each batch
-
-        with torch.no_grad():
-            for inputs, targets in dataloader:
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
-
-                # Extract both outputs and latent spaces
-                outputs = self.model(inputs)
                 latent_space = self.model.extract_latent_space(inputs)
                 latent_spaces.append(latent_space)
 
@@ -162,13 +129,44 @@ class Learning_Appr:
                 correct_predictions += (predicted_classes[mask] == targets[mask]).sum().item()
                 total_predictions += mask.sum().item()
 
+
         average_loss = total_loss / len(dataloader)
+
         accuracy = correct_predictions / total_predictions if total_predictions != 0 else 0
 
-        # Now, latent_spaces contains the extracted features for each batch
-        # You might want to process these further depending on your use case
-
         return average_loss, accuracy, predictions_list, latent_spaces
+
+
+    # def eval(self, dataloader):
+    #     self.model.eval()
+    #     total_loss, correct_predictions, total_predictions = 0.0, 0, 0
+    #     predictions_list, true_labels, predicted_labels, latent_spaces = [], [], [], []
+    #
+    #     with torch.no_grad():
+    #         for inputs, targets in dataloader:
+    #             inputs, targets = inputs.to(self.device), targets.to(self.device)
+    #             outputs = self.model(inputs)
+    #
+    #             latent_space = self.model.extract_latent_space(inputs)
+    #             latent_spaces.append(latent_space)
+    #
+    #             loss = self.criterion(outputs, targets)
+    #             total_loss += loss.item()
+    #
+    #             predicted_classes = torch.argmax(outputs, dim=1)
+    #
+    #             predictions_list.append(predicted_classes)
+    #
+    #             predicted_labels.extend(predicted_classes.numpy().flatten().tolist())
+    #             true_labels.extend(targets.numpy().flatten().tolist())
+    #
+    #     average_loss = total_loss / len(dataloader)
+    #
+    #     # Calculate macro F1 score
+    #     macro_f1 = f1_score(true_labels, predicted_labels, average='weighted')
+    #
+    #     return average_loss, macro_f1, predictions_list, latent_spaces
+
 
 
     def criterion(self, outputs, targets):
