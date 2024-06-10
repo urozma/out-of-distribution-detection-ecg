@@ -9,8 +9,8 @@ import network
 import learning_approach
 from dataset import get_loaders
 from add_qs import add_qs_peaks
-from scipy.stats import mannwhitneyu, wilcoxon
-
+from scipy.stats import wilcoxon
+from sklearn import metrics
 
 def main(argv=None):
     tstart = time.time()
@@ -39,13 +39,11 @@ def main(argv=None):
     parser.add_argument('--add-qs-after', default=False, type=bool, required=False,
                         help='Add QS peaks to test results for plotting (default=%(default)s)')
 
-
     # retrain args
-    parser.add_argument('--retrain', default=True, type=bool, required=False,
+    parser.add_argument('--retrain', default=False, type=bool, required=False,
                         help='Should the model be retrained from scratch(default=%(default)s)')
-    parser.add_argument('--retrain-finetune', default=True, type=bool, required=False,
+    parser.add_argument('--retrain-finetune', default=False, type=bool, required=False,
                         help='Should the model be finetuned again (default=%(default)s)')
-
 
     # dataset args
     parser.add_argument('--num-workers', default=4, type=int, required=False,
@@ -54,7 +52,6 @@ def main(argv=None):
                         help='Copy Tensors into CUDA pinned memory before returning them (default=%(default)s)')
     parser.add_argument('--batch-size', default=5, type=int, required=False,
                         help='Number of samples per batch to load (default=%(default)s)')
-
 
     # training args
     parser.add_argument('--nepochs', default=40, type=int, required=False,
@@ -113,7 +110,6 @@ def main(argv=None):
     else:
         print('No saved model found, starting training from scratch')
 
-
     # Learning Approach
     appr_args, extra_args = learning_approach.Learning_Appr.extra_parser(extra_args)
     utils.seed_everything(seed=args.seed)
@@ -132,7 +128,8 @@ def main(argv=None):
                                                      num_work=args.num_workers,
                                                      pin_mem=args.pin_memory,
                                                      data_type=data_type,
-                                                     real_data_amount=args.real_data_amount)
+                                                     real_data_amount=args.real_data_amount,
+                                                     add_qs=args.add_qs)
 
     # Get finetuning loaders
     trn_loader_ft, val_loader_ft, tst_loader_ft = get_loaders(batch_sz=args.batch_size,
@@ -148,7 +145,7 @@ def main(argv=None):
                                                      pin_mem=args.pin_memory,
                                                      data_type='real',
                                                      real_data_amount=args.real_data_amount,
-                                                     health='Atrial fibrillation',
+                                                     health=['Sinus tachycardia', 'Sinus bradycardia', 'Sinus arrhythmia','Atrial fibrillation'],
                                                      add_qs=args.add_qs)
 
 
@@ -164,8 +161,6 @@ def main(argv=None):
         torch.save(net.state_dict(), model_path)
         print('Model saved to {}'.format(model_path))
         print('-' * 108)
-
-
 
     # Finetune
     if args.transfer is True:
@@ -196,6 +191,7 @@ def main(argv=None):
     # Test
     test_loss, test_acc, predictions_list, latent_healthy = appr.eval(tst_loader_ft)
     uh_test_loss, uh_test_acc, uh_predictions_list, latent_unhealthy = appr.eval(ood_tst_loader)
+    _, _, _, latent_trn = appr.eval(trn_loader_ft)
 
     if args.add_qs_after is True:
         predictions_list = add_qs_peaks(tst_loader_ft.dataset, predictions_list)
@@ -208,9 +204,71 @@ def main(argv=None):
     print('[Elapsed time ={:.1f} h]'.format((time.time() - tstart) / (60 * 60)))
     print('Done!')
     print('-' * 108)
+
     # Flatten the latent space arrays if they are multi-dimensional
     latent_healthy_flat = np.concatenate([x.flatten() for x in latent_healthy])
     latent_unhealthy_flat = np.concatenate([x.flatten() for x in latent_unhealthy])
+    latent_trn_flat = np.concatenate([x.flatten() for x in latent_trn])
+
+    def flatten_and_concatenate(latents_list):
+        # Flatten each tensor and concatenate into a single tensor
+        flattened = [tensor.view(tensor.size(0), -1) for tensor in latents_list]
+        concatenated = torch.cat(flattened, dim=0)
+        return concatenated
+
+    def compute_distances(train_latents, test_latents):
+        distances = torch.cdist(test_latents, train_latents, p=2)  # p=2 for euclidian
+        return distances
+
+    def rank_samples(distances):
+        min_distances = distances.min(dim=1)[0]
+        # sorted_indices = torch.argsort(min_distances)
+        return min_distances #sorted_indices, min_distances
+
+    def calculate_metrics(y_score, y_true):
+        # calculate curves
+        fpr, tpr, _ = metrics.roc_curve(y_true, y_score, pos_label=1)
+        prec, recall, _ = metrics.precision_recall_curve(y_true, y_score)
+        # pick position closer to TPR at 95%
+        idx = (np.abs(tpr - 0.95)).argmin()
+        # calculate Detection Error
+        det_error = 0.5 * (1 - tpr[idx]) + 0.5 * fpr[idx]
+
+        auroc = metrics.roc_auc_score(y_true, y_score)
+        aupr_in = metrics.auc(recall, prec)
+
+        # print the metrics
+        print('---')
+        print('TPR {}%, FPR {}% '.format(np.round(tpr[idx] * 100, decimals=2), np.round(fpr[idx] * 100, decimals=2)))
+        print('Detection Error {} '.format(det_error * 100, decimals=2))
+        print('AUROC {}%'.format(np.round(auroc * 100, decimals=2)))
+        print('AUPR In {}%'.format(np.round(aupr_in * 100, decimals=2)))
+        # interchange positive and negative classes to print AUPR-out
+        y_true = 1 - y_true
+        y_score = 1.0 - y_score
+        prec, recall, _ = metrics.precision_recall_curve(y_true, y_score)
+        aupr_out = metrics.auc(recall, prec)
+        print('AUPR Out {}%'.format(np.round(aupr_out * 100, decimals=2)))
+
+        return tpr[idx], fpr[idx], det_error, auroc, aupr_in, aupr_out
+
+
+    # Compute distances
+    train_latents = flatten_and_concatenate(latent_trn)
+    test_latents = flatten_and_concatenate(latent_healthy+latent_unhealthy)
+    dist_matrix = compute_distances(train_latents, test_latents)
+
+    # Rank
+    min_distances = rank_samples(dist_matrix)
+
+    # Create labels for the test samples: 0 for healthy, 1 for unhealthy
+    healthy_labels = torch.zeros(int(len(latent_healthy_flat)/3000/8))
+    unhealthy_labels = torch.ones(int(len(latent_unhealthy_flat)/3000/8))
+    true_labels = torch.cat([healthy_labels, unhealthy_labels])
+
+    # Evaluate
+    tpr, fpr, det_error, auroc, aupr_in, aupr_out = calculate_metrics(min_distances, true_labels)
+
     if len(latent_healthy_flat) > len(latent_unhealthy_flat):
         latent_healthy_flat = latent_healthy_flat[:len(latent_unhealthy_flat)]
     elif len(latent_unhealthy_flat) > len(latent_healthy_flat):
@@ -231,7 +289,6 @@ def main(argv=None):
     else:
         print('Significant difference between the distributions')
     print('=' * 108)
-
 
     indices = np.array(range(3000))/500
 
@@ -303,17 +360,9 @@ def main(argv=None):
     plt.legend(loc="lower right")
     plt.show()
 
-    # plt.figure(4)
-    # plt.plot(range(len(appr.trn_loss_list)), appr.trn_loss_list, label='Train loss')
-    # plt.plot(range(len(appr.val_loss_list)), appr.val_loss_list, label='Validation loss')
-    # plt.xlabel('Epoch')
-    # plt.ylabel('Loss')
-    # plt.legend()
-    # plt.show()
 
     plt.figure(num=3, figsize=(8, 8))
     for i in range(5):
-    #for i, sample in enumerate(ood_tst_loader.dataset[:5]):
         sample = ood_tst_loader.dataset[i]
         signal = np.transpose(sample[0]) * 1
 
@@ -336,7 +385,6 @@ def main(argv=None):
         plt.grid(True, which='minor', axis='both', linestyle='--', color='lightgray')
 
         # Set the x-axis major tick marks to appear every 1 ms
-
         plt.xticks(np.arange(0, 10, 1))
         plt.ylim(-8, 8)
         plt.xlim(0, 6)
@@ -380,22 +428,29 @@ def main(argv=None):
     plt.legend(loc="lower right")
     plt.show()
 
-    return test_loss, test_acc, uh_test_loss, uh_test_acc, p_value
+    return test_loss, test_acc, uh_test_loss, uh_test_acc, p_value, tpr, fpr, det_error, auroc, aupr_in, aupr_out
 
 if __name__ == '__main__':
-    num_iterations = 5  # Number of times to repeat the training and evaluation
+    num_iterations = 10  # Number of times to repeat the training and evaluation
     all_test_accs, all_uh_test_accs = [], []  # List to store test accuracy of each iteration
     all_test_losses, all_uh_test_losses = [], []  # List to store test loss of each iteration
     all_p_values = []
+    all_tpr, all_fpr, all_det_error, all_auroc, all_aupr_in, all_aupr_out = [], [], [], [], [], []
 
     for iteration in range(num_iterations):
         print(f'Starting iteration {iteration+1}/{num_iterations}')
-        test_loss, test_acc, uh_test_loss, uh_test_acc,  p_value = main()  # Assuming main returns test_loss and test_acc
+        test_loss, test_acc, uh_test_loss, uh_test_acc,  p_value,  tpr, fpr, det_error, auroc, aupr_in, aupr_out = main()  # Assuming main returns test_loss and test_acc
         all_test_accs.append(test_acc)
         all_test_losses.append(test_loss)
         all_uh_test_accs.append(uh_test_acc)
         all_uh_test_losses.append(uh_test_loss)
         all_p_values.append(p_value)
+        all_tpr.append(tpr)
+        all_fpr.append(fpr)
+        all_det_error.append(det_error)
+        all_auroc.append(auroc)
+        all_aupr_in.append(aupr_in)
+        all_aupr_out.append(aupr_out)
 
     # After all iterations are done, save the results
     results_path = '../results'  # Or any path you prefer
@@ -404,6 +459,14 @@ if __name__ == '__main__':
     np.save(os.path.join(results_path, 'all_uh_test_accs.npy'), np.array(all_uh_test_accs))
     np.save(os.path.join(results_path, 'all_uh_test_losses.npy'), np.array(all_uh_test_losses))
     np.save(os.path.join(results_path, 'all_p_values.npy'), np.array(all_p_values))
+    np.save(os.path.join(results_path, 'all_tpr.npy'), np.array(all_tpr))
+    np.save(os.path.join(results_path, 'all_fpr.npy'), np.array(all_fpr))
+    np.save(os.path.join(results_path, 'all_det_error.npy'), np.array(all_det_error))
+    np.save(os.path.join(results_path, 'all_auroc.npy'), np.array(all_auroc))
+    np.save(os.path.join(results_path, 'all_aupr_in.npy'), np.array(all_aupr_in))
+    np.save(os.path.join(results_path, 'all_aupr_out.npy'), np.array(all_aupr_out))
+
+
     print('All iterations completed and results saved.')
 
     # Load the saved results
@@ -413,6 +476,13 @@ if __name__ == '__main__':
     all_uh_test_accs = np.load(os.path.join(results_path, 'all_uh_test_accs.npy'))
     all_uh_test_losses = np.load(os.path.join(results_path, 'all_uh_test_losses.npy'))
     all_p_values = np.load(os.path.join(results_path, 'all_p_values.npy'))
+    all_tpr = np.load(os.path.join(results_path, 'all_tpr.npy'))
+    all_fpr = np.load(os.path.join(results_path, 'all_fpr.npy'))
+    all_det_error = np.load(os.path.join(results_path, 'all_det_error.npy'))
+    all_auroc = np.load(os.path.join(results_path, 'all_auroc.npy'))
+    all_aupr_in = np.load(os.path.join(results_path, 'all_aupr_in.npy'))
+    all_aupr_out = np.load(os.path.join(results_path, 'all_aupr_out.npy'))
+
 
     # Calculate averages
     average_accuracy = np.mean(all_test_accs)
@@ -420,6 +490,13 @@ if __name__ == '__main__':
     average_uh_accuracy = np.mean(all_uh_test_accs)
     average_uh_loss = np.mean(all_uh_test_losses)
     average_p_value = np.mean(all_p_values)
+    average_tpr = np.mean(all_tpr)
+    average_fpr = np.mean(all_fpr)
+    average_det_error = np.mean(all_det_error)
+    average_auroc = np.mean(all_auroc)
+    average_aupr_in = np.mean(all_aupr_in)
+    average_aupr_out = np.mean(all_aupr_out)
+
 
     # Print averages
     print('Average Test Accuracy (H):{:5.1f}%'.format(100 * average_accuracy))
@@ -427,12 +504,9 @@ if __name__ == '__main__':
     print('Average Test Loss (H): {:.3f}'.format(average_loss))
     print('Average Test Loss (D): {:.3f}'.format(average_uh_loss))
     print('Average P-value: ',average_p_value)
-
-    #
-    # # Plot P-values
-    # plt.figure(figsize=(10, 5))
-    # plt.hist(all_p_values, label='P-values')
-    # plt.ylabel('Iterations')
-    # plt.xlabel('P-value')
-    # plt.title('Average P-value Over {:} Iterations: {:.5f}'.format(num_iterations, average_p_value))
-    # plt.show()
+    print('Average TPR score: {}%'.format(np.round(average_tpr * 100, decimals=2)))
+    print('Average FPR score: {}%'.format(np.round(average_fpr * 100, decimals=2)))
+    print('Average Detection Error: {}%'.format(np.round(average_det_error * 100, decimals=2)))
+    print('Average AUROC score: {}%'.format(np.round(average_auroc * 100, decimals=2)))
+    print('Average AUPR In score: {}%'.format(np.round(average_aupr_in * 100, decimals=2)))
+    print('Average AUPR Out score: {}%'.format(np.round(average_aupr_out * 100, decimals=2)))

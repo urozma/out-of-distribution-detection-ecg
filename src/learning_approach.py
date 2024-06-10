@@ -101,7 +101,6 @@ class Learning_Appr:
             total_loss.backward()
             self.optimizer.step()
 
-
     def eval(self, dataloader):
         self.model.eval()
         total_loss, correct_predictions, total_predictions = 0.0, 0, 0
@@ -136,39 +135,6 @@ class Learning_Appr:
 
         return average_loss, accuracy, predictions_list, latent_spaces
 
-
-    # def eval(self, dataloader):
-    #     self.model.eval()
-    #     total_loss, correct_predictions, total_predictions = 0.0, 0, 0
-    #     predictions_list, true_labels, predicted_labels, latent_spaces = [], [], [], []
-    #
-    #     with torch.no_grad():
-    #         for inputs, targets in dataloader:
-    #             inputs, targets = inputs.to(self.device), targets.to(self.device)
-    #             outputs = self.model(inputs)
-    #
-    #             latent_space = self.model.extract_latent_space(inputs)
-    #             latent_spaces.append(latent_space)
-    #
-    #             loss = self.criterion(outputs, targets)
-    #             total_loss += loss.item()
-    #
-    #             predicted_classes = torch.argmax(outputs, dim=1)
-    #
-    #             predictions_list.append(predicted_classes)
-    #
-    #             predicted_labels.extend(predicted_classes.numpy().flatten().tolist())
-    #             true_labels.extend(targets.numpy().flatten().tolist())
-    #
-    #     average_loss = total_loss / len(dataloader)
-    #
-    #     # Calculate macro F1 score
-    #     macro_f1 = f1_score(true_labels, predicted_labels, average='weighted')
-    #
-    #     return average_loss, macro_f1, predictions_list, latent_spaces
-
-
-
     def criterion(self, outputs, targets):
         """Returns the loss value"""
 
@@ -176,7 +142,6 @@ class Learning_Appr:
         targets = targets.squeeze(1).long()
         criterion= torch.nn.CrossEntropyLoss(weight=weights)
         loss = criterion(outputs, targets)
-
 
         return loss
 

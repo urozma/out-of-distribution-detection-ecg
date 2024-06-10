@@ -4,10 +4,7 @@ from torch.utils import data
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 from ECG_signal_generator import dataset
-import matplotlib.pyplot as plt
-import itertools
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 from add_qs import add_qs_peaks_modified
 from sklearn.utils import shuffle
 
@@ -42,9 +39,11 @@ def get_data(data_type, real_data_amount, health, add_qs):
     # Load the CSV file into a pandas DataFrame
 
     if data_type == 'real':
-        df_all = pd.read_csv('ludb_data.csv', header=None)
+        df_all = pd.read_csv('ludb_data_w_fibrillation.csv', header=None)
 
-        df = df_all.loc[df_all.iloc[:, 3] == health]
+        if isinstance(health, str):
+            health = [health]
+        df = df_all.loc[df_all.iloc[:, 3].isin(health)]
 
         # Assuming each signal has 5000 entries
         signal_length = 3000
@@ -121,23 +120,11 @@ def split_dataset(dataset, target):
     np.random.seed(None)
     dataset, target = shuffle(dataset, target)
 
-    tst_nr = 14
+    tst_nr = 50
     trn_nr = round(0.7*len(dataset))
     val_nr = len(dataset)-tst_nr-trn_nr
 
     split = [tst_nr,val_nr,trn_nr]
-
-    # train_data = dataset[:split[0]]
-    # train_target = target[:split[0]]
-    # train_tuple = (train_data, train_target)
-    #
-    # val_data = dataset[split[0]:split[0] + split[1]]
-    # val_target = target[split[0]:split[0] + split[1]]
-    # val_tuple = (val_data, val_target)
-    #
-    # test_data = dataset[split[0] + split[1]:split[0] + split[1] + split[2]]
-    # test_target = target[split[0] + split[1]:split[0] + split[1] + split[2]]
-    # test_tuple = (test_data, test_target)
 
     test_data = dataset[:split[0]]
     test_target = target[:split[0]]

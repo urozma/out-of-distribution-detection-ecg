@@ -78,7 +78,6 @@ class UNet(nn.Module):
         enc2 = self.enc_block2(F.max_pool1d(enc1, 2))
         enc3 = self.enc_block3(F.max_pool1d(enc2, 2))
         enc4 = self.enc_block4(F.max_pool1d(enc3, 2))
-
         return enc4
     def get_copy(self):
         """Get weights from the model"""
