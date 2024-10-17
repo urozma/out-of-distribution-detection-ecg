@@ -2,7 +2,7 @@
 
 This project uses machine learning to automate the analysis of ECG signals and explores the possibilities of anomaly detection through out-of-distribution detection, as well as transfer learning with limited data availability.
 
-## Functionalities
+## Key Features
 
 ### U-Net
 
@@ -16,6 +16,12 @@ Generating synthetic data using real life ECG wave metrics, and using these sign
 The detection of ECG anomalies is attempted using models trained exclusively on healthy data and
 out-of-distribution detection to determine whether the looked-at signal shows a significant difference from a healthy one.
 ![U-Net](images/approach.png)
+
+## Built With
+
+This project is built using the [FACIL framework](https://github.com/mmasana/FACIL) (Framework for Analysis of Class-Incremental Learning).
+For more details, check the [official repository](https://github.com/mmasana/FACIL).
+
 
 ## Getting Started
 
