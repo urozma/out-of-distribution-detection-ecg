@@ -1,15 +1,27 @@
 # Out-of-Distribution Detection on ECG signals via Knowledge Transfer from Synthetic Data
 
-This project uses machine learning to explore how well it's possible to automate the analysis of ECG signals through out-of-distribution detection and transfer learning with limited data availability.
+This project uses machine learning to automate the analysis of ECG signals and explores the possibilities of anomaly detection through out-of-distribution detection, as well as transfer learning with limited data availability.
 
-## Features
+## Key Features
 
-- **U-Net**: The network used is an adapted U-Net architecture to improve ECG pattern interpretation.
-![The exact U-Net architecture used](images/unet.png)
+### U-Net
 
-- **Out-of-Distribution Detection**: The detection of ECG anomalies is attempted using models trained exclusively on healthy data and
-  out-of-distribution detection to determine whether the looked-at signal shows a significant difference from a healthy one.
-- **Synthetic Data Pretraining**: Pretrain on synthetically generated data to enhance performance when finetuned on the few real ECG signals available.
+The network used is an adapted U-Net architecture to improve ECG pattern interpretation, specifically the detection of an ECG's P, Q, R, S and T waves.
+![U-Net](images/unet.png)
+
+### Synthetic Data Pretraining
+Generating synthetic data using real life ECG wave metrics, and using these signals to pretrain the model to enhance performance when finetuned on the few real ECG signals available.
+
+### Out-of-Distribution Detection
+The detection of ECG anomalies is attempted using models trained exclusively on healthy data and
+out-of-distribution detection to determine whether the looked-at signal shows a significant difference from a healthy one.
+![U-Net](images/approach.png)
+
+## Built With
+
+This project is built using the [FACIL framework](https://github.com/mmasana/FACIL) (Framework for Analysis of Class-Incremental Learning).
+For more details, check the [official repository](https://github.com/mmasana/FACIL).
+
 
 ## Getting Started
 
