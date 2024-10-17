@@ -17,6 +17,10 @@ The detection of ECG anomalies is attempted using models trained exclusively on 
 out-of-distribution detection to determine whether the looked-at signal shows a significant difference from a healthy one.
 ![U-Net](images/approach.png)
 
+## Dataset
+
+For training the model the [Lobachevsky University Electrocardiography Database (LUDB)](https://physionet.org/content/ludb/1.0.1/) is used. The LUDB contains electrocardiography (ECG) recordings collected by Lobachevsky University and was used for training, testing, and evaluating the models implemented in this project.
+
 ## Built With
 
 This project is built using the [FACIL framework](https://github.com/mmasana/FACIL) (Framework for Analysis of Class-Incremental Learning).
